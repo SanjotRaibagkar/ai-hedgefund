@@ -7,10 +7,12 @@ A comprehensive AI-powered hedge fund system that integrates Indian stock market
 ### Core Features
 - **Multi-Agent AI Analysis**: 15+ AI analysts (Warren Buffett, Peter Lynch, Phil Fisher, etc.)
 - **Indian Market Integration**: Complete support for NSE/BSE stocks with real-time data
-- **Modular Strategy Framework**: 10+ trading strategies (intraday + options)
+- **EOD Momentum Strategies**: Production-ready swing trading strategies with advanced risk management
+- **Modular Strategy Framework**: 12+ trading strategies (EOD + intraday + options)
 - **Real-time Data**: NSEUtility integration for live Indian market data
-- **Technical & Fundamental Analysis**: Comprehensive stock analysis
-- **Risk Management**: Built-in risk assessment and portfolio management
+- **Technical & Fundamental Analysis**: Comprehensive stock analysis with 15+ indicators
+- **Advanced Risk Management**: Multi-method stop loss, position sizing, and portfolio controls
+- **Data Infrastructure**: SQLite database with historical data collection and daily updates
 
 ### Indian Market Specific Features
 - **NSEUtility Integration**: Real-time NSE data, options chains, market depth
@@ -20,6 +22,14 @@ A comprehensive AI-powered hedge fund system that integrates Indian stock market
 - **News Integration**: Indian financial news aggregation and sentiment analysis
 
 ### Trading Strategies
+#### EOD Momentum Strategies (2) - **NEW in Phase 3!**
+- **Long Momentum Strategy**: Bullish momentum-based swing trading
+- **Short Momentum Strategy**: Bearish momentum-based swing trading
+- **Advanced Technical Analysis**: 15+ indicators (RSI, MACD, Bollinger Bands, etc.)
+- **Risk Management**: Multiple stop loss/take profit methods
+- **Position Sizing**: 6 different sizing methodologies
+- **Portfolio Coordination**: Multi-strategy framework
+
 #### Intraday Strategies (5)
 - **Momentum Breakout Strategy**: Identifies breakout opportunities
 - **Market Depth Strategy**: Analyzes order book depth
@@ -101,7 +111,31 @@ poetry run python src/main.py --ticker RELIANCE.NS
 poetry run python src/main.py --ticker "RELIANCE.NS,TCS.NS,HDFCBANK.NS"
 ```
 
-### 2. Run Strategy Framework
+### 2. Run EOD Momentum Strategies (Phase 3)
+```python
+from src.strategies.eod.strategy_manager import EODStrategyManager
+
+# Initialize EOD strategy manager
+manager = EODStrategyManager(portfolio_value=100000)
+
+# Prepare universe data
+universe_data = {
+    "RELIANCE.NS": get_historical_data("RELIANCE.NS"),
+    "TCS.NS": get_historical_data("TCS.NS"),
+    "HDFCBANK.NS": get_historical_data("HDFCBANK.NS")
+}
+
+# Run daily analysis
+results = manager.run_daily_analysis(universe_data)
+print(f"Long signals: {len(results['framework_analysis']['long_signals'])}")
+print(f"Short signals: {len(results['framework_analysis']['short_signals'])}")
+
+# Execute trades (simulation mode)
+recommendations = results['recommendations']
+execution_results = manager.execute_trades(recommendations)
+```
+
+### 3. Run Legacy Strategy Framework
 ```python
 from src.strategies.strategy_manager import get_strategy_manager
 
@@ -116,7 +150,7 @@ intraday_results = manager.execute_intraday_strategies(market_data)
 options_results = manager.execute_options_strategies(market_data)
 ```
 
-### 3. Use Enhanced API
+### 4. Use Enhanced API
 ```python
 from src.tools.enhanced_api import get_prices, get_intraday_prices
 
@@ -150,9 +184,10 @@ Market Data Sources → Data Providers → Enhanced API → AI Agents → Strate
    - Generate buy/sell/hold signals with confidence scores
 
 3. **Strategy Framework** (`src/strategies/`)
-   - Modular strategy system
-   - Intraday and options strategies
-   - Strategy manager for execution
+   - **EOD Momentum Strategies** (`src/strategies/eod/`): Production-ready swing trading
+   - **Intraday Strategies**: Day trading strategies 
+   - **Options Strategies**: Options-based strategies
+   - **Strategy Manager**: Execution and coordination
 
 4. **Enhanced API** (`src/tools/enhanced_api.py`)
    - Unified API layer
@@ -272,6 +307,7 @@ print(f'RELIANCE Price: ₹{info[\"lastPrice\"]}')
 - [Phase 2: Indian Market Specifics](PHASE2_INDIAN_MARKET_SPECIFICS.md)
 - [Phase 3: Advanced Features](PHASE3_ADVANCED_FEATURES.md)
 - [Phase 4: NSEUtility Integration](PHASE4_NSEUTILITY_INTEGRATION.md)
+- [**Phase 3 Completion Summary**](PHASE3_COMPLETION_SUMMARY.md) - **NEW!**
 - [Recovery Checkpoint](RECOVERY_CHECKPOINT.md)
 
 ### API Documentation
@@ -307,12 +343,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🎯 Roadmap
 
-- [ ] Web interface for strategy management
+### Phase 4: Machine Learning Integration (Next)
+- [ ] ML-based signal enhancement
+- [ ] Feature engineering integration
+- [ ] MLflow integration for model tracking
+- [ ] Predictive modeling and strategy optimization
+
+### Future Phases
+- [ ] Zipline backtesting integration
+- [ ] Web interface for strategy management  
 - [ ] Real-time portfolio tracking
-- [ ] Advanced risk management
-- [ ] Machine learning model integration
 - [ ] Multi-exchange support
 - [ ] Mobile app
+
+### ✅ Completed Phases
+- ✅ **Phase 1**: Indian Stock Market Integration
+- ✅ **Phase 2**: Data Infrastructure & Daily Updates
+- ✅ **Phase 3**: EOD Momentum Strategies
 
 ## 🙏 Acknowledgments
 

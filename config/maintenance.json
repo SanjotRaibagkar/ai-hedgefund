@@ -1,0 +1,94 @@
+{
+  "enabled": true,
+  "timezone": "Asia/Kolkata",
+  "tasks": {
+    "daily_update": {
+      "enabled": true,
+      "schedule": "daily",
+      "time": "06:00",
+      "retry_on_failure": true,
+      "max_retries": 3,
+      "notification_on_failure": true,
+      "description": "Daily data collection for all configured tickers"
+    },
+    "quality_check": {
+      "enabled": true,
+      "schedule": "daily", 
+      "time": "07:00",
+      "parameters": {
+        "quality_threshold": 80.0,
+        "generate_report": true
+      },
+      "description": "Monitor data quality and identify issues"
+    },
+    "fill_missing_data": {
+      "enabled": true,
+      "schedule": "weekly",
+      "day": "sunday",
+      "time": "08:00",
+      "parameters": {
+        "fill_method": "smart",
+        "max_gap_days": 7,
+        "batch_size": 10
+      },
+      "description": "Fill missing data gaps using intelligent methods"
+    },
+    "database_cleanup": {
+      "enabled": true,
+      "schedule": "weekly",
+      "day": "sunday", 
+      "time": "02:00",
+      "parameters": {
+        "keep_days": 365,
+        "cleanup_temp_tables": true,
+        "vacuum_database": true
+      },
+      "description": "Clean up old data and optimize database"
+    },
+    "health_check": {
+      "enabled": true,
+      "schedule": "minutes",
+      "interval": 30,
+      "parameters": {
+        "check_database": true,
+        "check_data_freshness": true,
+        "check_api_endpoints": true
+      },
+      "description": "Continuous system health monitoring"
+    },
+    "backup_database": {
+      "enabled": true,
+      "schedule": "daily",
+      "time": "01:00",
+      "parameters": {
+        "backup_path": "backups/",
+        "keep_backups": 7,
+        "compress_backup": true
+      },
+      "description": "Daily database backup"
+    }
+  },
+  "notifications": {
+    "email_enabled": false,
+    "email_recipients": [],
+    "email_smtp_server": "",
+    "email_port": 587,
+    "slack_enabled": false,
+    "slack_webhook": "",
+    "discord_enabled": false,
+    "discord_webhook": ""
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_file": "logs/maintenance.log",
+    "max_log_size_mb": 100,
+    "log_rotation": true,
+    "keep_log_files": 30
+  },
+  "performance": {
+    "max_concurrent_tasks": 3,
+    "task_timeout_minutes": 60,
+    "memory_limit_mb": 1024,
+    "cpu_limit_percent": 80
+  }
+}
