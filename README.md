@@ -1,293 +1,325 @@
-# AI Hedge Fund
+# AI Hedge Fund with Indian Market Integration
 
-This is a proof of concept for an AI-powered hedge fund.  The goal of this project is to explore the use of AI to make trading decisions.  This project is for **educational** purposes only and is not intended for real trading or investment.
+A comprehensive AI-powered hedge fund system that integrates Indian stock market data with advanced trading strategies, real-time analysis, and modular architecture.
 
-This system employs several agents working together:
+## 🚀 Features
 
-1. Aswath Damodaran Agent - The Dean of Valuation, focuses on story, numbers, and disciplined valuation
-2. Ben Graham Agent - The godfather of value investing, only buys hidden gems with a margin of safety
-3. Bill Ackman Agent - An activist investor, takes bold positions and pushes for change
-4. Cathie Wood Agent - The queen of growth investing, believes in the power of innovation and disruption
-5. Charlie Munger Agent - Warren Buffett's partner, only buys wonderful businesses at fair prices
-6. Michael Burry Agent - The Big Short contrarian who hunts for deep value
-7. Peter Lynch Agent - Practical investor who seeks "ten-baggers" in everyday businesses
-8. Phil Fisher Agent - Meticulous growth investor who uses deep "scuttlebutt" research 
-9. Rakesh Jhunjhunwala Agent - The Big Bull of India
-10. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
-11. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-12. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-13. Sentiment Agent - Analyzes market sentiment and generates trading signals
-14. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-15. Technicals Agent - Analyzes technical indicators and generates trading signals
-16. Risk Manager - Calculates risk metrics and sets position limits
-17. Portfolio Manager - Makes final trading decisions and generates orders
+### Core Features
+- **Multi-Agent AI Analysis**: 15+ AI analysts (Warren Buffett, Peter Lynch, Phil Fisher, etc.)
+- **Indian Market Integration**: Complete support for NSE/BSE stocks with real-time data
+- **Modular Strategy Framework**: 10+ trading strategies (intraday + options)
+- **Real-time Data**: NSEUtility integration for live Indian market data
+- **Technical & Fundamental Analysis**: Comprehensive stock analysis
+- **Risk Management**: Built-in risk assessment and portfolio management
 
-<img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
+### Indian Market Specific Features
+- **NSEUtility Integration**: Real-time NSE data, options chains, market depth
+- **Multi-Data Provider Support**: Yahoo Finance, NSEUtility, custom providers
+- **Indian Market Calendar**: Trading hours, holidays, corporate actions
+- **Currency Support**: INR/USD conversion, Indian numbering system
+- **News Integration**: Indian financial news aggregation and sentiment analysis
 
-Note: the system does not actually make any trades.
+### Trading Strategies
+#### Intraday Strategies (5)
+- **Momentum Breakout Strategy**: Identifies breakout opportunities
+- **Market Depth Strategy**: Analyzes order book depth
+- **VWAP Strategy**: Volume-weighted average price analysis
+- **Gap Trading Strategy**: Exploits price gaps
+- **Intraday Mean Reversion**: Mean reversion opportunities
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
+#### Options Strategies (5)
+- **IV Skew Strategy**: Implied volatility skew analysis
+- **Gamma Exposure Strategy**: Gamma risk management
+- **Options Flow Strategy**: Unusual options activity tracking
+- **Iron Condor Strategy**: Range-bound market strategy
+- **Straddle Strategy**: Volatility-based strategy
 
-## Disclaimer
+## 📋 Prerequisites
 
-This project is for **educational and research purposes only**.
+- Python 3.8+
+- Poetry (for dependency management)
+- Git
+- Internet connection for data fetching
 
-- Not intended for real trading or investment
-- No investment advice or guarantees provided
-- Creator assumes no liability for financial losses
-- Consult a financial advisor for investment decisions
-- Past performance does not indicate future results
-
-By using this software, you agree to use it solely for learning purposes.
-
-## Table of Contents
-- [How to Install](#how-to-install)
-- [How to Run](#how-to-run)
-  - [⌨️ Command Line Interface](#️-command-line-interface)
-  - [🖥️ Web Application (NEW!)](#️-web-application)
-- [Contributing](#contributing)
-- [Feature Requests](#feature-requests)
-- [License](#license)
-
-## How to Install
-
-Before you can run the AI Hedge Fund, you'll need to install it and set up your API keys. These steps are common to both the full-stack web application and command line interface.
+## 🛠️ Installation
 
 ### 1. Clone the Repository
-
 ```bash
-git clone https://github.com/virattt/ai-hedge-fund.git
-cd ai-hedge-fund
+git clone https://github.com/SanjotRaibagkar/ai-hedgefund.git
+cd ai-hedgefund
 ```
 
-### 2. Set Up Your API Keys
-
-Create a `.env` file for your API keys:
+### 2. Install Poetry (if not installed)
 ```bash
-# Create .env file for your API keys (in the root directory)
-cp .env.example .env
-```
+# Windows
+powershell -Command "Invoke-Expression (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content"
 
-Open and edit the `.env` file to add your API keys:
-```bash
-# For running LLMs hosted by openai (gpt-4o, gpt-4o-mini, etc.)
-OPENAI_API_KEY=your-openai-api-key
-
-# For running GigaChat (use gigachat credentials)
-GIGACHAT_API_KEY=your-gigachat-api-key
-
-# For running LLMs hosted by groq (deepseek, llama3, etc.)
-GROQ_API_KEY=your-groq-api-key
-
-# For getting financial data to power the hedge fund
-FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
-```
-
-**Important**: You must set at least one LLM API key (`OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
-
-**Financial Data**: Data for AAPL, GOOGL, MSFT, NVDA, and TSLA is free and does not require an API key. For any other ticker, you will need to set the `FINANCIAL_DATASETS_API_KEY` in the .env file.
-
-## How to Run
-
-### ⌨️ Command Line Interface
-
-For users who prefer working with command line tools, you can run the AI Hedge Fund directly via terminal. This approach offers more granular control and is useful for automation, scripting, and integration purposes.
-
-<img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
-
-Choose one of the following installation methods:
-
-#### Using Poetry
-
-1. Install Poetry (if not already installed):
-```bash
+# macOS/Linux
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-2. Install dependencies:
+### 3. Install Dependencies
 ```bash
 poetry install
 ```
 
-#### Using Docker
-
-1. Make sure you have Docker installed on your system. If not, you can download it from [Docker's official website](https://www.docker.com/get-started).
-
-2. Navigate to the docker directory:
+### 4. Activate Virtual Environment
 ```bash
-cd docker
+poetry shell
 ```
 
-3. Build the Docker image:
-```bash
-# On Linux/Mac:
-./run.sh build
+## ⚙️ Configuration
 
-# On Windows:
-run.bat build
+### 1. Environment Variables
+Create a `.env` file in the root directory:
+```bash
+# API Keys (optional for basic functionality)
+ANTHROPIC_API_KEY=your_anthropic_key_here
+OPENAI_API_KEY=your_openai_key_here
+
+# Database Configuration
+DATABASE_URL=sqlite:///ai_hedge_fund.db
+
+# Logging Level
+LOG_LEVEL=INFO
 ```
 
-#### Running the AI Hedge Fund (with Poetry)
+### 2. Data Provider Configuration
+The system automatically detects and uses the best data provider:
+- **Indian Stocks**: NSEUtility (default) → Yahoo Finance (fallback)
+- **US Stocks**: Yahoo Finance
+- **Options Data**: NSEUtility for Indian options
+
+## 🚀 Quick Start
+
+### 1. Test Indian Stock Analysis
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+# Analyze an Indian stock
+poetry run python src/main.py --ticker RELIANCE.NS
+
+# Analyze multiple stocks
+poetry run python src/main.py --ticker "RELIANCE.NS,TCS.NS,HDFCBANK.NS"
 ```
 
-#### Running the AI Hedge Fund (with Docker)
-```bash
-# Navigate to the docker directory first
-cd docker
+### 2. Run Strategy Framework
+```python
+from src.strategies.strategy_manager import get_strategy_manager
 
-# On Linux/Mac:
-./run.sh --ticker AAPL,MSFT,NVDA main
+# Get strategy manager
+manager = get_strategy_manager()
 
-# On Windows:
-run.bat --ticker AAPL,MSFT,NVDA main
+# Execute all strategies
+results = manager.execute_all_strategies(market_data)
+
+# Execute specific category
+intraday_results = manager.execute_intraday_strategies(market_data)
+options_results = manager.execute_options_strategies(market_data)
 ```
 
-You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
+### 3. Use Enhanced API
+```python
+from src.tools.enhanced_api import get_prices, get_intraday_prices
 
-```bash
-# With Poetry:
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+# Get historical prices
+prices = get_prices("RELIANCE.NS", "2024-01-01", "2024-12-31")
 
-# With Docker (from docker/ directory):
-# On Linux/Mac:
-./run.sh --ticker AAPL,MSFT,NVDA --ollama main
+# Get intraday data
+intraday = get_intraday_prices("RELIANCE.NS")
 
-# On Windows:
-run.bat --ticker AAPL,MSFT,NVDA --ollama main
+# Get options data
+options = get_live_option_chain("RELIANCE.NS")
 ```
 
-You can also specify a `--show-reasoning` flag to print the reasoning of each agent to the console.
+## 📊 System Architecture
 
-```bash
-# With Poetry:
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --show-reasoning
-
-# With Docker (from docker/ directory):
-# On Linux/Mac:
-./run.sh --ticker AAPL,MSFT,NVDA --show-reasoning main
-
-# On Windows:
-run.bat --ticker AAPL,MSFT,NVDA --show-reasoning main
+### Data Flow
+```
+Market Data Sources → Data Providers → Enhanced API → AI Agents → Strategy Framework → Trading Signals
 ```
 
-You can optionally specify the start and end dates to make decisions for a specific time period.
+### Key Components
+1. **Data Providers** (`src/data/providers/`)
+   - `NSEUtilityProvider`: Real-time NSE data
+   - `YahooFinanceProvider`: Yahoo Finance data
+   - `IndianNewsProvider`: Indian financial news
+   - `CurrencyProvider`: INR/USD conversion
 
+2. **AI Agents** (`src/agents/`)
+   - 15+ specialized AI analysts
+   - Each agent has unique investment philosophy
+   - Generate buy/sell/hold signals with confidence scores
+
+3. **Strategy Framework** (`src/strategies/`)
+   - Modular strategy system
+   - Intraday and options strategies
+   - Strategy manager for execution
+
+4. **Enhanced API** (`src/tools/enhanced_api.py`)
+   - Unified API layer
+   - Intelligent provider selection
+   - Real-time data access
+
+## 🎯 Usage Examples
+
+### Example 1: Complete Stock Analysis
 ```bash
-# With Poetry:
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 
-
-# With Docker (from docker/ directory):
-# On Linux/Mac:
-./run.sh --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 main
-
-# On Windows:
-run.bat --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 main
+# Run full analysis on RELIANCE
+poetry run python src/main.py --ticker RELIANCE.NS --analysis full
 ```
 
-#### Running the Backtester (with Poetry)
-```bash
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+### Example 2: Strategy Testing
+```python
+from src.strategies.strategy_manager import execute_strategies
+
+# Test intraday strategies
+data = {
+    "ticker": "RELIANCE.NS",
+    "prices": [...],
+    "volume": [...],
+    "market_depth": {...}
+}
+
+results = execute_strategies(data, category="intraday")
+print(results)
 ```
 
-#### Running the Backtester (with Docker)
-```bash
-# Navigate to the docker directory first
-cd docker
+### Example 3: Custom Data Provider
+```python
+from src.data.providers.provider_factory import get_provider_factory
 
-# On Linux/Mac:
-./run.sh --ticker AAPL,MSFT,NVDA backtest
+# Get specific provider
+factory = get_provider_factory()
+nse_provider = factory.get_nse_utility_provider()
 
-# On Windows:
-run.bat --ticker AAPL,MSFT,NVDA backtest
+# Use provider directly
+prices = nse_provider.get_prices("RELIANCE.NS", "2024-01-01", "2024-12-31")
 ```
 
-**Example Output:**
-<img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
+## 📈 Data Sources
 
+### Indian Market Data
+- **NSEUtility**: Real-time NSE data, options, market depth
+- **Yahoo Finance**: Historical data, financial metrics
+- **Indian News**: Financial news aggregation
+- **Corporate Actions**: Dividends, splits, bonus issues
 
-You can optionally specify the start and end dates to backtest over a specific time period.
+### US Market Data
+- **Yahoo Finance**: Comprehensive US market data
+- **Financial APIs**: Additional data sources
 
-```bash
-# With Poetry:
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+## 🔧 Advanced Configuration
 
-# With Docker (from docker/ directory):
-# On Linux/Mac:
-./run.sh --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 backtest
+### Custom Strategy Development
+```python
+from src.strategies.base_strategy import BaseStrategy
 
-# On Windows:
-run.bat --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01 backtest
+class MyCustomStrategy(BaseStrategy):
+    def __init__(self):
+        super().__init__("My Custom Strategy", "Custom strategy description")
+    
+    def generate_signals(self, data):
+        # Your strategy logic here
+        return {"action": "BUY", "confidence": 0.8}
+    
+    def validate_data(self, data):
+        # Data validation logic
+        return True
 ```
 
-You can also specify a `--ollama` flag to run the backtester using local LLMs.
-```bash
-# With Poetry:
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA --ollama
+### Provider Selection
+```python
+from src.tools.enhanced_api import get_prices_with_provider
 
-# With Docker (from docker/ directory):
-# On Linux/Mac:
-./run.sh --ticker AAPL,MSFT,NVDA --ollama backtest
-
-# On Windows:
-run.bat --ticker AAPL,MSFT,NVDA --ollama backtest
+# Force specific provider
+prices = get_prices_with_provider("RELIANCE.NS", "2024-01-01", "2024-12-31", provider="nse")
+prices = get_prices_with_provider("AAPL", "2024-01-01", "2024-12-31", provider="yahoo")
 ```
 
-### 🖥️ Web Application
+## 🧪 Testing
 
-The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. **This is recommended for most users, especially those who prefer visual interfaces over command line tools.**
-
-<img width="1721" alt="Screenshot 2025-06-28 at 6 41 03 PM" src="https://github.com/user-attachments/assets/b95ab696-c9f4-416c-9ad1-51feb1f5374b" />
-
-#### For Mac/Linux:
+### Run All Tests
 ```bash
-cd app && ./run.sh
+# Test Indian market integration
+poetry run python -c "
+from src.tools.enhanced_api import get_prices
+prices = get_prices('RELIANCE.NS', '2024-01-01', '2024-12-31')
+print(f'Fetched {len(prices)} price records for RELIANCE.NS')
+"
+
+# Test strategy framework
+poetry run python -c "
+from src.strategies.strategy_manager import get_strategy_summary
+summary = get_strategy_summary()
+print(f'Total strategies: {summary[\"total_strategies\"]}')
+"
 ```
 
-If you get a "permission denied" error, run this first:
+### Test Individual Components
 ```bash
-cd app && chmod +x run.sh && ./run.sh
+# Test NSEUtility
+poetry run python -c "
+from src.nsedata.NseUtility import NseUtils
+nse = NseUtils()
+info = nse.get_quote('RELIANCE')
+print(f'RELIANCE Price: ₹{info[\"lastPrice\"]}')
+"
 ```
 
-#### For Windows:
-```bash
-# Go to /app directory
-cd app
+## 📚 Documentation
 
-# Run the app
-\.run.bat
-```
+### Phase Documentation
+- [Phase 1: Indian Stocks Integration](INDIAN_STOCKS_INTEGRATION.md)
+- [Phase 2: Indian Market Specifics](PHASE2_INDIAN_MARKET_SPECIFICS.md)
+- [Phase 3: Advanced Features](PHASE3_ADVANCED_FEATURES.md)
+- [Phase 4: NSEUtility Integration](PHASE4_NSEUTILITY_INTEGRATION.md)
+- [Recovery Checkpoint](RECOVERY_CHECKPOINT.md)
 
-**That's it!** These scripts will:
-1. Check for required dependencies (Node.js, Python, Poetry)
-2. Install all dependencies automatically  
-3. Start both frontend and backend services
-4. **Automatically open your web browser** to the application
+### API Documentation
+- [Enhanced API Reference](src/tools/enhanced_api.py)
+- [Strategy Framework](src/strategies/)
+- [Data Providers](src/data/providers/)
 
-
-#### Detailed Setup Instructions
-
-For detailed setup instructions, troubleshooting, and advanced configuration options, see:
-- [Full-Stack App Documentation](./app/README.md)
-- [Frontend Documentation](./app/frontend/README.md)  
-- [Backend Documentation](./app/backend/README.md)
-
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
+## 📄 License
 
-## Feature Requests
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-If you have a feature request, please open an [issue](https://github.com/virattt/ai-hedge-fund/issues) and make sure it is tagged with `enhancement`.
+## 🆘 Support
 
-## License
+### Common Issues
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+1. **Poetry not found**: Install Poetry first
+2. **API key errors**: Check your `.env` file
+3. **Data fetch failures**: Check internet connection and API limits
+4. **Strategy execution errors**: Verify data format and validation
+
+### Getting Help
+- Check the [Issues](https://github.com/SanjotRaibagkar/ai-hedgefund/issues) page
+- Review the documentation files
+- Test individual components
+
+## 🎯 Roadmap
+
+- [ ] Web interface for strategy management
+- [ ] Real-time portfolio tracking
+- [ ] Advanced risk management
+- [ ] Machine learning model integration
+- [ ] Multi-exchange support
+- [ ] Mobile app
+
+## 🙏 Acknowledgments
+
+- NSEUtility for Indian market data
+- Yahoo Finance for comprehensive market data
+- All contributors and testers
+
+---
+
+**Note**: This system is for educational and research purposes. Always do your own research before making investment decisions.
