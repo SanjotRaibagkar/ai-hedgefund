@@ -62,8 +62,21 @@ class EODStockScreener:
                 start_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
                 
                 data = get_prices(ticker, start_date, end_date)
-                if data is None or data.empty:
+                
+                # Handle different data formats
+                if data is None:
                     self.logger.warning(f"No data available for {ticker}")
+                    continue
+                    
+                if isinstance(data, list):
+                    if len(data) == 0:
+                        self.logger.warning(f"Empty data list for {ticker}")
+                        continue
+                    # Convert list to DataFrame if needed
+                    data = pd.DataFrame(data)
+                
+                if hasattr(data, 'empty') and data.empty:
+                    self.logger.warning(f"Empty DataFrame for {ticker}")
                     continue
                 
                 # Analyze stock
