@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage
 from src.graph.state import AgentState, show_agent_reasoning
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
-from src.tools.api import (
+from src.tools.enhanced_api import (
     get_financial_metrics,
     get_market_cap,
     search_line_items,
@@ -67,20 +67,23 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
         # ------------------------------------------------------------------
         # Valuation models
         # ------------------------------------------------------------------
-        wc_change = li_curr.working_capital - li_prev.working_capital
+        # Handle None values for working capital
+        wc_curr = li_curr.working_capital if li_curr.working_capital is not None else 0
+        wc_prev = li_prev.working_capital if li_prev.working_capital is not None else 0
+        wc_change = wc_curr - wc_prev
 
         # Owner Earnings
         owner_val = calculate_owner_earnings_value(
-            net_income=li_curr.net_income,
-            depreciation=li_curr.depreciation_and_amortization,
-            capex=li_curr.capital_expenditure,
+            net_income=li_curr.net_income if li_curr.net_income is not None else 0,
+            depreciation=li_curr.depreciation_and_amortization if li_curr.depreciation_and_amortization is not None else 0,
+            capex=li_curr.capital_expenditure if li_curr.capital_expenditure is not None else 0,
             working_capital_change=wc_change,
             growth_rate=most_recent_metrics.earnings_growth or 0.05,
         )
 
         # Discounted Cash Flow
         dcf_val = calculate_intrinsic_value(
-            free_cash_flow=li_curr.free_cash_flow,
+            free_cash_flow=li_curr.free_cash_flow if li_curr.free_cash_flow is not None else 0,
             growth_rate=most_recent_metrics.earnings_growth or 0.05,
             discount_rate=0.10,
             terminal_growth_rate=0.03,
@@ -93,7 +96,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
         # Residual Income Model
         rim_val = calculate_residual_income_value(
             market_cap=most_recent_metrics.market_cap,
-            net_income=li_curr.net_income,
+            net_income=li_curr.net_income if li_curr.net_income is not None else 0,
             price_to_book_ratio=most_recent_metrics.price_to_book_ratio,
             book_value_growth=most_recent_metrics.book_value_growth or 0.03,
         )
