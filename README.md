@@ -31,13 +31,21 @@ A comprehensive AI-powered hedge fund system that integrates Indian stock market
 - **Position Sizing**: 6 different sizing methodologies
 - **Portfolio Coordination**: Multi-strategy framework
 
-#### Machine Learning Enhanced Strategies - **NEW in Phase 4!**
+#### Machine Learning Enhanced Strategies - **Phase 4**
 - **ML-Enhanced EOD Strategy**: Combines traditional momentum with ML predictions
 - **Multi-Model Framework**: XGBoost, LightGBM, Random Forest, Linear Regression
 - **Advanced Feature Engineering**: 50+ technical and fundamental features
 - **MLflow Integration**: Complete experiment tracking and model versioning
 - **Comprehensive Backtesting**: Realistic portfolio simulation with costs
 - **Ensemble Methods**: Voting regressor for optimal model combination
+
+#### Stock Screening & Analysis - **NEW in Phase 5!**
+- **EOD Stock Screener**: Bullish/bearish signals with entry, stop loss, and targets
+- **Intraday Stock Screener**: Breakout, reversal, and momentum detection
+- **Options Analyzer**: Nifty & BankNifty analysis with OI and volatility metrics
+- **Market Predictor**: Multi-timeframe predictions (15min to multi-day)
+- **Modern Web UI**: Professional dashboard with MokshTechandInvestment branding
+- **Comprehensive Screening Manager**: Unified interface for all screening modules
 
 #### Intraday Strategies (5)
 - **Momentum Breakout Strategy**: Identifies breakout opportunities
@@ -84,6 +92,9 @@ poetry install
 
 # Install ML dependencies (for Phase 4 features)
 poetry install --with ml
+
+# Install screening dependencies (for Phase 5 features)
+poetry install --with screening
 ```
 
 ### 4. Activate Virtual Environment
@@ -219,7 +230,8 @@ print(f'RELIANCE Price: ₹{info[\"lastPrice\"]}')
 - [Phase 3: Advanced Features](PHASE3_ADVANCED_FEATURES.md)
 - [Phase 4: NSEUtility Integration](PHASE4_NSEUTILITY_INTEGRATION.md)
 - [**Phase 3 Completion Summary**](PHASE3_COMPLETION_SUMMARY.md)
-- [**Phase 4 Completion Summary**](PHASE4_COMPLETION_SUMMARY.md) - **NEW!**
+- [**Phase 4 Completion Summary**](PHASE4_COMPLETION_SUMMARY.md)
+- [**Phase 5 Completion Summary**](PHASE5_COMPLETION_SUMMARY.md) - **NEW!**
 - [Recovery Checkpoint](RECOVERY_CHECKPOINT.md)
 
 ### API Documentation
@@ -275,6 +287,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ **Phase 2**: Data Infrastructure & Daily Updates
 - ✅ **Phase 3**: EOD Momentum Strategies
 - ✅ **Phase 4**: Machine Learning Integration
+- ✅ **Phase 5**: Stock Screening & Advanced UI System
 
 ## 🙏 Acknowledgments
 
