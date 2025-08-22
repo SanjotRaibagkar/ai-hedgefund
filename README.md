@@ -8,6 +8,7 @@ A comprehensive AI-powered hedge fund system that integrates Indian stock market
 - **Multi-Agent AI Analysis**: 15+ AI analysts (Warren Buffett, Peter Lynch, Phil Fisher, etc.)
 - **Indian Market Integration**: Complete support for NSE/BSE stocks with real-time data
 - **EOD Momentum Strategies**: Production-ready swing trading strategies with advanced risk management
+- **Machine Learning Integration**: ML-enhanced strategies with comprehensive backtesting
 - **Modular Strategy Framework**: 12+ trading strategies (EOD + intraday + options)
 - **Real-time Data**: NSEUtility integration for live Indian market data
 - **Technical & Fundamental Analysis**: Comprehensive stock analysis with 15+ indicators
@@ -22,13 +23,21 @@ A comprehensive AI-powered hedge fund system that integrates Indian stock market
 - **News Integration**: Indian financial news aggregation and sentiment analysis
 
 ### Trading Strategies
-#### EOD Momentum Strategies (2) - **NEW in Phase 3!**
+#### EOD Momentum Strategies (2) - **Phase 3**
 - **Long Momentum Strategy**: Bullish momentum-based swing trading
 - **Short Momentum Strategy**: Bearish momentum-based swing trading
 - **Advanced Technical Analysis**: 15+ indicators (RSI, MACD, Bollinger Bands, etc.)
 - **Risk Management**: Multiple stop loss/take profit methods
 - **Position Sizing**: 6 different sizing methodologies
 - **Portfolio Coordination**: Multi-strategy framework
+
+#### Machine Learning Enhanced Strategies - **NEW in Phase 4!**
+- **ML-Enhanced EOD Strategy**: Combines traditional momentum with ML predictions
+- **Multi-Model Framework**: XGBoost, LightGBM, Random Forest, Linear Regression
+- **Advanced Feature Engineering**: 50+ technical and fundamental features
+- **MLflow Integration**: Complete experiment tracking and model versioning
+- **Comprehensive Backtesting**: Realistic portfolio simulation with costs
+- **Ensemble Methods**: Voting regressor for optimal model combination
 
 #### Intraday Strategies (5)
 - **Momentum Breakout Strategy**: Identifies breakout opportunities
@@ -70,7 +79,11 @@ curl -sSL https://install.python-poetry.org | python3 -
 
 ### 3. Install Dependencies
 ```bash
+# Install all dependencies
 poetry install
+
+# Install ML dependencies (for Phase 4 features)
+poetry install --with ml
 ```
 
 ### 4. Activate Virtual Environment
@@ -98,176 +111,74 @@ LOG_LEVEL=INFO
 The system automatically detects and uses the best data provider:
 - **Indian Stocks**: NSEUtility (default) → Yahoo Finance (fallback)
 - **US Stocks**: Yahoo Finance
-- **Options Data**: NSEUtility for Indian options
 
 ## 🚀 Quick Start
 
-### 1. Test Indian Stock Analysis
+### 1. Basic Usage
 ```bash
-# Analyze an Indian stock
+# Run the main application
 poetry run python src/main.py --ticker RELIANCE.NS
 
-# Analyze multiple stocks
-poetry run python src/main.py --ticker "RELIANCE.NS,TCS.NS,HDFCBANK.NS"
+# Run with specific date range
+poetry run python src/main.py --ticker RELIANCE.NS --start-date 2024-01-01 --end-date 2024-12-31
 ```
 
-### 2. Run EOD Momentum Strategies (Phase 3)
-```python
-from src.strategies.eod.strategy_manager import EODStrategyManager
-
-# Initialize EOD strategy manager
-manager = EODStrategyManager(portfolio_value=100000)
-
-# Prepare universe data
-universe_data = {
-    "RELIANCE.NS": get_historical_data("RELIANCE.NS"),
-    "TCS.NS": get_historical_data("TCS.NS"),
-    "HDFCBANK.NS": get_historical_data("HDFCBANK.NS")
-}
-
-# Run daily analysis
-results = manager.run_daily_analysis(universe_data)
-print(f"Long signals: {len(results['framework_analysis']['long_signals'])}")
-print(f"Short signals: {len(results['framework_analysis']['short_signals'])}")
-
-# Execute trades (simulation mode)
-recommendations = results['recommendations']
-execution_results = manager.execute_trades(recommendations)
-```
-
-### 3. Run Legacy Strategy Framework
-```python
-from src.strategies.strategy_manager import get_strategy_manager
-
-# Get strategy manager
-manager = get_strategy_manager()
-
-# Execute all strategies
-results = manager.execute_all_strategies(market_data)
-
-# Execute specific category
-intraday_results = manager.execute_intraday_strategies(market_data)
-options_results = manager.execute_options_strategies(market_data)
-```
-
-### 4. Use Enhanced API
-```python
-from src.tools.enhanced_api import get_prices, get_intraday_prices
-
-# Get historical prices
-prices = get_prices("RELIANCE.NS", "2024-01-01", "2024-12-31")
-
-# Get intraday data
-intraday = get_intraday_prices("RELIANCE.NS")
-
-# Get options data
-options = get_live_option_chain("RELIANCE.NS")
-```
-
-## 📊 System Architecture
-
-### Data Flow
-```
-Market Data Sources → Data Providers → Enhanced API → AI Agents → Strategy Framework → Trading Signals
-```
-
-### Key Components
-1. **Data Providers** (`src/data/providers/`)
-   - `NSEUtilityProvider`: Real-time NSE data
-   - `YahooFinanceProvider`: Yahoo Finance data
-   - `IndianNewsProvider`: Indian financial news
-   - `CurrencyProvider`: INR/USD conversion
-
-2. **AI Agents** (`src/agents/`)
-   - 15+ specialized AI analysts
-   - Each agent has unique investment philosophy
-   - Generate buy/sell/hold signals with confidence scores
-
-3. **Strategy Framework** (`src/strategies/`)
-   - **EOD Momentum Strategies** (`src/strategies/eod/`): Production-ready swing trading
-   - **Intraday Strategies**: Day trading strategies 
-   - **Options Strategies**: Options-based strategies
-   - **Strategy Manager**: Execution and coordination
-
-4. **Enhanced API** (`src/tools/enhanced_api.py`)
-   - Unified API layer
-   - Intelligent provider selection
-   - Real-time data access
-
-## 🎯 Usage Examples
-
-### Example 1: Complete Stock Analysis
+### 2. Strategy Analysis
 ```bash
-# Run full analysis on RELIANCE
-poetry run python src/main.py --ticker RELIANCE.NS --analysis full
+# Analyze with specific strategy
+poetry run python src/main.py --ticker RELIANCE.NS --strategy long_momentum
+
+# Run EOD momentum analysis
+poetry run python src/main.py --ticker RELIANCE.NS --strategy eod_momentum
 ```
 
-### Example 2: Strategy Testing
-```python
-from src.strategies.strategy_manager import execute_strategies
+### 3. ML-Enhanced Analysis (Phase 4)
+```bash
+# Run ML-enhanced strategy
+poetry run python -c "
+from src.ml.ml_strategies import MLEnhancedEODStrategy
+strategy = MLEnhancedEODStrategy()
+result = strategy.train_model('AAPL', '2023-01-01', '2023-12-31')
+print('ML model training completed')
+"
 
-# Test intraday strategies
-data = {
-    "ticker": "RELIANCE.NS",
-    "prices": [...],
-    "volume": [...],
-    "market_depth": {...}
-}
-
-results = execute_strategies(data, category="intraday")
-print(results)
+# Run comprehensive backtesting
+poetry run python -c "
+from src.ml.backtesting import MLBacktestingFramework
+framework = MLBacktestingFramework()
+results = framework.run_backtest('AAPL', '2023-01-01', '2023-12-31')
+print('Backtesting completed')
+"
 ```
 
-### Example 3: Custom Data Provider
-```python
-from src.data.providers.provider_factory import get_provider_factory
+## 📊 Data Infrastructure
 
-# Get specific provider
-factory = get_provider_factory()
-nse_provider = factory.get_nse_utility_provider()
+### Historical Data Collection
+```bash
+# Collect historical data for multiple tickers
+poetry run python -c "
+from src.data.collectors.async_data_collector import AsyncDataCollector
+from src.data.database.duckdb_manager import DatabaseManager
 
-# Use provider directly
-prices = nse_provider.get_prices("RELIANCE.NS", "2024-01-01", "2024-12-31")
+db_manager = DatabaseManager()
+collector = AsyncDataCollector(db_manager)
+
+# Collect data for Indian stocks
+tickers = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS']
+result = collector.collect_multiple_tickers(tickers, '2023-01-01', '2023-12-31')
+print(f'Collected data for {len(result)} tickers')
+"
 ```
 
-## 📈 Data Sources
-
-### Indian Market Data
-- **NSEUtility**: Real-time NSE data, options, market depth
-- **Yahoo Finance**: Historical data, financial metrics
-- **Indian News**: Financial news aggregation
-- **Corporate Actions**: Dividends, splits, bonus issues
-
-### US Market Data
-- **Yahoo Finance**: Comprehensive US market data
-- **Financial APIs**: Additional data sources
-
-## 🔧 Advanced Configuration
-
-### Custom Strategy Development
-```python
-from src.strategies.base_strategy import BaseStrategy
-
-class MyCustomStrategy(BaseStrategy):
-    def __init__(self):
-        super().__init__("My Custom Strategy", "Custom strategy description")
-    
-    def generate_signals(self, data):
-        # Your strategy logic here
-        return {"action": "BUY", "confidence": 0.8}
-    
-    def validate_data(self, data):
-        # Data validation logic
-        return True
-```
-
-### Provider Selection
-```python
-from src.tools.enhanced_api import get_prices_with_provider
-
-# Force specific provider
-prices = get_prices_with_provider("RELIANCE.NS", "2024-01-01", "2024-12-31", provider="nse")
-prices = get_prices_with_provider("AAPL", "2024-01-01", "2024-12-31", provider="yahoo")
+### Daily Data Updates
+```bash
+# Run daily data updates
+poetry run python -c "
+from src.data.update.update_manager import UpdateManager
+manager = UpdateManager()
+manager.run_daily_updates()
+print('Daily updates completed')
+"
 ```
 
 ## 🧪 Testing
@@ -307,13 +218,15 @@ print(f'RELIANCE Price: ₹{info[\"lastPrice\"]}')
 - [Phase 2: Indian Market Specifics](PHASE2_INDIAN_MARKET_SPECIFICS.md)
 - [Phase 3: Advanced Features](PHASE3_ADVANCED_FEATURES.md)
 - [Phase 4: NSEUtility Integration](PHASE4_NSEUTILITY_INTEGRATION.md)
-- [**Phase 3 Completion Summary**](PHASE3_COMPLETION_SUMMARY.md) - **NEW!**
+- [**Phase 3 Completion Summary**](PHASE3_COMPLETION_SUMMARY.md)
+- [**Phase 4 Completion Summary**](PHASE4_COMPLETION_SUMMARY.md) - **NEW!**
 - [Recovery Checkpoint](RECOVERY_CHECKPOINT.md)
 
 ### API Documentation
 - [Enhanced API Reference](src/tools/enhanced_api.py)
 - [Strategy Framework](src/strategies/)
 - [Data Providers](src/data/providers/)
+- [ML Components](src/ml/) - **NEW!**
 
 ## 🤝 Contributing
 
@@ -335,6 +248,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 2. **API key errors**: Check your `.env` file
 3. **Data fetch failures**: Check internet connection and API limits
 4. **Strategy execution errors**: Verify data format and validation
+5. **ML dependencies**: Run `poetry install --with ml` for Phase 4 features
 
 ### Getting Help
 - Check the [Issues](https://github.com/SanjotRaibagkar/ai-hedgefund/issues) page
@@ -343,11 +257,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🎯 Roadmap
 
-### Phase 4: Machine Learning Integration (Next)
-- [ ] ML-based signal enhancement
-- [ ] Feature engineering integration
-- [ ] MLflow integration for model tracking
-- [ ] Predictive modeling and strategy optimization
+### Phase 5: Advanced ML Features (Next)
+- [ ] Deep Learning Models (LSTM, Transformers)
+- [ ] Reinforcement Learning strategies
+- [ ] Advanced ensemble methods
+- [ ] Online learning capabilities
 
 ### Future Phases
 - [ ] Zipline backtesting integration
@@ -360,6 +274,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ **Phase 1**: Indian Stock Market Integration
 - ✅ **Phase 2**: Data Infrastructure & Daily Updates
 - ✅ **Phase 3**: EOD Momentum Strategies
+- ✅ **Phase 4**: Machine Learning Integration
 
 ## 🙏 Acknowledgments
 
