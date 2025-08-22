@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 import time
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 from src.data.cache import get_cache
 from src.data.models import (
@@ -109,64 +109,38 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         return response
 
 
-def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> List[Price]:
-    """Fetch price data from cache or appropriate data provider."""
-    # Create a cache key that includes all parameters to ensure exact matches
-    cache_key = f"{ticker}_{start_date}_{end_date}"
+def get_prices(ticker: str, start_date: str, end_date: str) -> Union[List[Dict], pd.DataFrame]:
+    """
+    Get historical price data for a ticker.
     
-    # Check cache first - simple exact match
-    if cached_data := _cache.get_prices(cache_key):
-        return [Price(**price) for price in cached_data]
-
-    # Determine data source based on ticker
-    if _is_indian_ticker(ticker):
-        # Use provider system for Indian stocks
-        try:
-            provider = get_provider_for_ticker(ticker)
-            prices = provider.get_prices(ticker, start_date, end_date)
-            
-            if prices:
-                # Cache the results
-                _cache.set_prices(cache_key, [p.model_dump() for p in prices])
-                return prices
-            else:
-                logger.warning(f"No price data found for Indian ticker: {ticker}")
-                return []
-                
-        except DataProviderError as e:
-            logger.error(f"Provider error for {ticker}: {str(e)}")
-            return []
-        except Exception as e:
-            logger.error(f"Unexpected error fetching prices for {ticker}: {str(e)}")
-            return []
-    
-    else:
-        # Use existing Financial Datasets API for US stocks
-        try:
-            headers = {}
-            financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-            if financial_api_key:
-                headers["X-API-KEY"] = financial_api_key
-
-            url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
-            response = _make_api_request(url, headers)
-            if response.status_code != 200:
-                raise Exception(f"Error fetching data: {ticker} - {response.status_code} - {response.text}")
-
-            # Parse response with Pydantic model
-            price_response = PriceResponse(**response.json())
-            prices = price_response.prices
-
-            if not prices:
-                return []
-
-            # Cache the results using the comprehensive cache key
-            _cache.set_prices(cache_key, [p.model_dump() for p in prices])
-            return prices
-            
-        except Exception as e:
-            logger.error(f"Error fetching price data for {ticker}: {str(e)}")
-            return []
+    Args:
+        ticker: Stock ticker symbol
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        
+    Returns:
+        List of price dictionaries or DataFrame
+    """
+    try:
+        # Get the appropriate provider
+        provider = get_provider_for_ticker(ticker)
+        
+        # For Indian stocks, use the DataFrame method for better compatibility
+        if _is_indian_ticker(ticker) and hasattr(provider, 'get_prices_as_dataframe'):
+            return provider.get_prices_as_dataframe(ticker, start_date, end_date)
+        
+        # For other stocks, use the standard method
+        prices = provider.get_prices(ticker, start_date, end_date)
+        
+        # Convert to list of dictionaries if it's a list of Price objects
+        if prices and isinstance(prices[0], Price):
+            return [price.__dict__ for price in prices]
+        
+        return prices
+        
+    except Exception as e:
+        logger.error(f"Error fetching price data for {ticker}: {e}")
+        return []
 
 
 def get_financial_metrics(

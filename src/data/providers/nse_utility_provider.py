@@ -69,6 +69,36 @@ class NSEUtilityProvider(BaseDataProvider):
             logger.error(f"Error fetching prices for {symbol}: {e}")
             return []
     
+    def get_prices_as_dataframe(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """Get historical price data as DataFrame for screening modules."""
+        try:
+            # Clean the symbol (remove .NS suffix for NSEUtility)
+            clean_symbol = symbol.replace('.NS', '').replace('.BO', '').replace('.NSE', '').replace('.BSE', '')
+            
+            # Get current price info
+            price_info = self.nse.price_info(clean_symbol)
+            if not price_info:
+                logger.warning(f"No price info available for {clean_symbol}")
+                return pd.DataFrame()
+            
+            # Create DataFrame with proper column names that screening modules expect
+            data = {
+                'open_price': [price_info['Open']],
+                'high_price': [price_info['High']],
+                'low_price': [price_info['Low']],
+                'close_price': [price_info['LastTradedPrice']],
+                'volume': [price_info.get('Volume', 0)],
+                'date': [datetime.now().date()]
+            }
+            
+            df = pd.DataFrame(data)
+            logger.info(f"Created DataFrame for {symbol} with {len(df)} records")
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error fetching prices as DataFrame for {symbol}: {e}")
+            return pd.DataFrame()
+    
     def get_financial_metrics(self, symbol: str, end_date: str, period: str = "ttm", limit: int = 1) -> List[FinancialMetrics]:
         """Get financial metrics for a symbol."""
         try:
