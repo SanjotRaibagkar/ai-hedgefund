@@ -1,0 +1,15 @@
+artifact_uri: file:C:/sanjot/virattt/ai-hedge-fund/mlruns/747238387033691142/ffe186fb0b8d4098b98fd83339a8a17f/artifacts
+end_time: 1755854845236
+entry_point_name: ''
+experiment_id: '747238387033691142'
+lifecycle_stage: active
+run_id: ffe186fb0b8d4098b98fd83339a8a17f
+run_name: backtest_RELIANCE.NS_20250822_145721
+run_uuid: ffe186fb0b8d4098b98fd83339a8a17f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755854841215
+status: 3
+tags: []
+user_id: Admin
