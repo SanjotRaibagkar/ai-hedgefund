@@ -235,15 +235,19 @@ def get_financial_metrics(
             return []
 
 
-def search_line_items(
+def get_line_items(
     ticker: str,
-    line_items: List[str],
     end_date: str,
+    line_items: List[str] = None,
     period: str = "ttm",
     limit: int = 10,
     api_key: str = None,
 ) -> List[LineItem]:
     """Fetch line items from appropriate data provider."""
+    # Default line items if none provided
+    if line_items is None:
+        line_items = ['revenue', 'net_income', 'total_assets', 'total_liabilities', 'total_equity']
+    
     # Determine data source based on ticker
     if _is_indian_ticker(ticker):
         # Use provider system for Indian stocks
