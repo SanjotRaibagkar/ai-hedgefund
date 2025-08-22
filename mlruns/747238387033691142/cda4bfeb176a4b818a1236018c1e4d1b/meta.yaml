@@ -1,0 +1,15 @@
+artifact_uri: file:C:/sanjot/virattt/ai-hedge-fund/mlruns/747238387033691142/cda4bfeb176a4b818a1236018c1e4d1b/artifacts
+end_time: 1755854832708
+entry_point_name: ''
+experiment_id: '747238387033691142'
+lifecycle_stage: active
+run_id: cda4bfeb176a4b818a1236018c1e4d1b
+run_name: test_experiment
+run_uuid: cda4bfeb176a4b818a1236018c1e4d1b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755854832602
+status: 3
+tags: []
+user_id: Admin
