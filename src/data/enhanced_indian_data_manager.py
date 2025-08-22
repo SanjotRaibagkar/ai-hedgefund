@@ -13,10 +13,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
 import time
-import aiohttp
-import aiofiles
 
-class IndianDataManager:
+class EnhancedIndianDataManager:
     """Enhanced Indian market data collection and storage using existing NSEUtility."""
     
     def __init__(self, db_path: str = "data/indian_market.db"):
@@ -169,6 +167,28 @@ class IndianDataManager:
         except Exception as e:
             logger.error(f"❌ Error fetching stocks: {e}")
             return []
+    
+    async def _store_securities(self, securities: List[Dict]):
+        """Store securities in database."""
+        with sqlite3.connect(self.db_path) as conn:
+            for security in securities:
+                conn.execute("""
+                    INSERT OR REPLACE INTO securities 
+                    (symbol, name, isin, sector, market_cap, listing_date, is_active, last_updated, last_data_date, total_records)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    security['symbol'],
+                    security['name'],
+                    security['isin'],
+                    security['sector'],
+                    security['market_cap'],
+                    security['listing_date'],
+                    security['is_active'],
+                    datetime.now().isoformat(),
+                    security['last_data_date'],
+                    security['total_records']
+                ))
+            conn.commit()
     
     async def download_10_years_data(self, symbols: List[str] = None) -> Dict:
         """Download 10 years of historical data for all symbols."""
@@ -606,4 +626,4 @@ class IndianDataManager:
         }
 
 # Global instance
-indian_data_manager = IndianDataManager() 
+enhanced_indian_data_manager = EnhancedIndianDataManager() 
