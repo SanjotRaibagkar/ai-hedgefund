@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple EOD Screener
-Fast EOD screening using NSEUtility and database.
+DuckDB EOD Screener
+Fast EOD screening using NSEUtility and DuckDB.
 """
 
 import pandas as pd
@@ -14,8 +14,8 @@ import duckdb
 from loguru import logger
 import os
 
-class SimpleEODScreener:
-    """Simple EOD screener using NSEUtility and DuckDB."""
+class DuckDBEODScreener:
+    """DuckDB EOD screener using NSEUtility and DuckDB."""
     
     def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
         self.db_path = db_path
@@ -27,7 +27,7 @@ class SimpleEODScreener:
                             min_volume: int = 100000,
                             min_price: float = 10.0) -> Dict:
         """Screen universe of stocks."""
-        logger.info("🎯 Starting Simple EOD Screening...")
+        logger.info("🎯 Starting DuckDB EOD Screening...")
         
         # Get symbols to screen
         if not symbols:
@@ -77,12 +77,28 @@ class SimpleEODScreener:
     
     async def _get_all_symbols(self) -> List[str]:
         """Get all symbols from database."""
-        with duckdb.connect(self.db_path) as conn:
-            symbols = pd.read_sql_query(
-                "SELECT symbol FROM securities WHERE is_active = true", 
-                conn
-            )['symbol'].tolist()
-        return symbols
+        try:
+            with duckdb.connect(self.db_path) as conn:
+                # Check if securities table exists
+                tables = conn.execute("SHOW TABLES").fetchall()
+                table_names = [table[0] for table in tables]
+                
+                if 'securities' in table_names:
+                    symbols = pd.read_sql_query(
+                        "SELECT symbol FROM securities WHERE is_active = true", 
+                        conn
+                    )['symbol'].tolist()
+                else:
+                    # Fallback to price_data table
+                    symbols = pd.read_sql_query(
+                        "SELECT DISTINCT symbol FROM price_data", 
+                        conn
+                    )['symbol'].tolist()
+                
+                return symbols
+        except Exception as e:
+            logger.error(f"Error getting symbols: {e}")
+            return []
     
     async def _screen_symbols_concurrent(self, 
                                        symbols: List[str],
@@ -347,4 +363,4 @@ class SimpleEODScreener:
         logger.info(f"📊 Summary saved to {summary_file}")
 
 # Global instance
-simple_eod_screener = SimpleEODScreener() 
+duckdb_eod_screener = DuckDBEODScreener() 
