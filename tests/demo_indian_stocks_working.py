@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from loguru import logger
 from src.screening.screening_manager import ScreeningManager
