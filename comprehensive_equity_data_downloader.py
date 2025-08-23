@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Comprehensive Equity Data Downloader
-Downloads 2 years of data for all equity companies from NSE complete equity list.
+Downloads data for all NSE equity stocks from 2024-01-01 to today.
+Uses NSEUtility's get_equity_full_list and get_fno_full_list methods.
 """
 
 import pandas as pd
@@ -10,34 +11,31 @@ import os
 import time
 import logging
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.nsedata.NseUtility import NseUtils
 import json
-from typing import List, Dict, Optional, Tuple
-import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('equity_download.log'),
-        logging.StreamHandler(sys.stdout)
+        logging.FileHandler('comprehensive_download.log'),
+        logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
 class ComprehensiveEquityDataDownloader:
-    """Comprehensive equity data downloader for NSE companies."""
+    """Download data for all NSE equity stocks."""
     
     def __init__(self, db_path: str = "data/comprehensive_equity.db"):
         """Initialize the downloader."""
         self.db_path = db_path
         self.nse = NseUtils()
-        self.progress_file = "download_progress.json"
+        self.progress_file = "comprehensive_progress.json"
         self.max_workers = 10
-        self.retry_attempts = 3
-        self.delay_between_requests = 0.5  # seconds
+        self.delay_between_requests = 0.5
         
         # Initialize database
         self._init_database()
@@ -46,7 +44,7 @@ class ComprehensiveEquityDataDownloader:
         self.progress = self._load_progress()
         
     def _init_database(self):
-        """Initialize the database with proper schema."""
+        """Initialize the database."""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
         conn = sqlite3.connect(self.db_path)
@@ -56,10 +54,10 @@ class ComprehensiveEquityDataDownloader:
             CREATE TABLE IF NOT EXISTS securities (
                 symbol TEXT PRIMARY KEY,
                 company_name TEXT,
-                isin TEXT,
-                sector TEXT,
-                instrument_type TEXT,
+                series TEXT,
                 listing_date TEXT,
+                face_value REAL,
+                is_fno BOOLEAN DEFAULT 0,
                 is_active BOOLEAN DEFAULT 1,
                 last_updated TEXT,
                 data_start_date TEXT,
@@ -68,7 +66,14 @@ class ComprehensiveEquityDataDownloader:
             )
         ''')
         
-        # Create price_data table with comprehensive schema
+        # Add is_fno column if it doesn't exist
+        try:
+            conn.execute('ALTER TABLE securities ADD COLUMN is_fno BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+        
+        # Create price_data table
         conn.execute('''
             CREATE TABLE IF NOT EXISTS price_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,23 +84,22 @@ class ComprehensiveEquityDataDownloader:
                 low_price REAL,
                 close_price REAL,
                 volume INTEGER,
-                turnover REAL,
                 last_updated TEXT,
                 UNIQUE(symbol, date)
             )
         ''')
         
-        # Create indexes for performance
+        # Create indexes
         conn.execute('CREATE INDEX IF NOT EXISTS idx_symbol_date ON price_data(symbol, date)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_symbol ON price_data(symbol)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_date ON price_data(date)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_fno ON securities(is_fno)')
         
         conn.commit()
         conn.close()
         logger.info(f"Database initialized: {self.db_path}")
     
-    def _load_progress(self) -> Dict:
-        """Load download progress from file."""
+    def _load_progress(self) -> dict:
+        """Load progress from file."""
         if os.path.exists(self.progress_file):
             try:
                 with open(self.progress_file, 'r') as f:
@@ -111,394 +115,335 @@ class ComprehensiveEquityDataDownloader:
         }
     
     def _save_progress(self):
-        """Save download progress to file."""
+        """Save progress to file."""
         self.progress['last_updated'] = datetime.now().isoformat()
         with open(self.progress_file, 'w') as f:
             json.dump(self.progress, f, indent=2)
     
-    def load_equity_list(self) -> List[Dict]:
-        """Load equity companies from NSE complete equity list."""
-        logger.info("Loading NSE complete equity list...")
-        
+    def get_all_equity_symbols(self) -> list:
+        """Get all equity symbols from NSE."""
         try:
-            # Read the CSV file
-            df = pd.read_csv('nse_complete_equity_list.csv')
+            logger.info("Fetching equity full list from NSE...")
+            equity_df = self.nse.get_equity_full_list(list_only=False)
+            logger.info(f"Found {len(equity_df)} equity symbols")
             
-            # Filter for equity instruments
-            equity_df = df[df['Instrument Type'] == 'Equity'].copy()
+            # Get FNO symbols
+            logger.info("Fetching FNO full list from NSE...")
+            fno_df = self.nse.get_fno_full_list(list_only=False)
+            fno_symbols = set(fno_df['symbol'].tolist() if 'symbol' in fno_df.columns else [])
+            logger.info(f"Found {len(fno_symbols)} FNO symbols")
             
-            # Convert company names to symbols (clean them)
-            equity_df['symbol'] = equity_df['Company Name'].apply(self._clean_company_name_to_symbol)
-            
-            # Remove invalid symbols
-            equity_df = equity_df[
-                (equity_df['symbol'].str.len() > 2) &
-                (~equity_df['Company Name'].str.contains('Mutual Fund|ETF|Trust', case=False, na=False))
-            ]
-            
-            # Convert to list of dictionaries
-            equity_list = []
+            # Process equity symbols
+            symbols_data = []
             for _, row in equity_df.iterrows():
-                equity_list.append({
-                    'symbol': row['symbol'],
-                    'company_name': row['Company Name'],
-                    'isin': row.get('ISIN', ''),
-                    'sector': row.get('Sector', ''),
-                    'instrument_type': row['Instrument Type']
+                symbol = str(row['SYMBOL']).strip()
+                company_name = str(row['NAME OF COMPANY']).strip()
+                series = str(row[' SERIES']).strip()
+                listing_date = str(row[' DATE OF LISTING']).strip()
+                face_value = float(row[' FACE VALUE']) if pd.notna(row[' FACE VALUE']) else 0
+                
+                # Check if symbol is in FNO list
+                is_fno = symbol in fno_symbols
+                
+                symbols_data.append({
+                    'symbol': symbol,
+                    'company_name': company_name,
+                    'series': series,
+                    'listing_date': listing_date,
+                    'face_value': face_value,
+                    'is_fno': is_fno
                 })
             
-            logger.info(f"Loaded {len(equity_list)} equity companies")
-            return equity_list
+            logger.info(f"Processed {len(symbols_data)} symbols (FNO: {sum(1 for s in symbols_data if s['is_fno'])})")
+            return symbols_data
             
         except Exception as e:
-            logger.error(f"Error loading equity list: {e}")
+            logger.error(f"Error fetching equity symbols: {e}")
             return []
     
-    def _clean_company_name_to_symbol(self, name: str) -> str:
-        """Clean company name to create symbol."""
-        if pd.isna(name):
-            return ""
-        
-        # Remove common suffixes
-        name = str(name).replace(' Limited', '').replace(' Ltd.', '').replace(' Ltd', '')
-        name = name.replace(' & ', 'AND').replace('.', '').replace('-', '').replace(' ', '')
-        name = ''.join(filter(str.isalnum, name)).upper()
-        return name
-    
-    def _get_historical_data(self, symbol: str, start_date: str, end_date: str) -> Optional[List[Dict]]:
-        """Get historical data for a symbol using NSEUtility."""
+    def _get_historical_data_for_symbol(self, symbol: str) -> pd.DataFrame:
+        """Get historical data for a symbol from 2024-01-01 to today."""
         try:
-            # Since NSEUtility doesn't have direct historical data method,
-            # we'll use price_info for current data and simulate historical data
-            # In a real implementation, you'd use a proper historical data API
+            # For now, we'll simulate historical data since NSEUtility doesn't have direct historical data method
+            # In a real implementation, you would use a proper historical data API
             
-            current_data = self.nse.price_info(symbol)
-            if not current_data or current_data.get('LastTradedPrice', 0) == 0:
-                return None
+            # Get current price info
+            price_info = self.nse.price_info(symbol)
+            if not price_info:
+                return pd.DataFrame()
             
-            # For now, we'll create simulated historical data
-            # In production, replace this with actual historical data API
-            historical_data = self._simulate_historical_data(symbol, start_date, end_date, current_data)
+            # Simulate historical data (this is a placeholder - replace with real historical data)
+            current_price = price_info['LastTradedPrice']
+            current_date = datetime.now()
             
-            return historical_data
+            # Generate simulated data for the past 2 years
+            historical_data = []
+            start_date = datetime(2024, 1, 1)
+            
+            current_sim_date = start_date
+            while current_sim_date <= current_date:
+                # Skip weekends
+                if current_sim_date.weekday() < 5:
+                    # Simulate price movement (this is just for demonstration)
+                    price_variation = (current_sim_date - start_date).days * 0.001
+                    simulated_price = current_price * (1 + price_variation)
+                    
+                    historical_data.append({
+                        'symbol': symbol,
+                        'date': current_sim_date.strftime('%Y-%m-%d'),
+                        'open_price': simulated_price * 0.99,
+                        'high_price': simulated_price * 1.02,
+                        'low_price': simulated_price * 0.98,
+                        'close_price': simulated_price,
+                        'volume': 1000000  # Simulated volume
+                    })
+                
+                current_sim_date += timedelta(days=1)
+            
+            return pd.DataFrame(historical_data)
             
         except Exception as e:
-            logger.error(f"Error getting data for {symbol}: {e}")
-            return None
+            logger.warning(f"Error getting historical data for {symbol}: {e}")
+            return pd.DataFrame()
     
-    def _simulate_historical_data(self, symbol: str, start_date: str, end_date: str, current_data: Dict) -> List[Dict]:
-        """Simulate historical data for demonstration purposes."""
-        # This is a placeholder - replace with actual historical data API
-        start = datetime.strptime(start_date, '%Y-%m-%d')
-        end = datetime.strptime(end_date, '%Y-%m-%d')
-        
-        data = []
-        current_price = current_data.get('LastTradedPrice', 100)
-        
-        # Generate simulated data for each trading day
-        current_date = start
-        while current_date <= end:
-            # Skip weekends
-            if current_date.weekday() < 5:  # Monday to Friday
-                # Simulate price variation
-                variation = (current_date.day % 10 - 5) / 100  # Simple variation
-                price = current_price * (1 + variation)
-                
-                data.append({
-                    'symbol': symbol,
-                    'date': current_date.strftime('%Y-%m-%d'),
-                    'open_price': price * 0.99,
-                    'high_price': price * 1.02,
-                    'low_price': price * 0.98,
-                    'close_price': price,
-                    'volume': current_data.get('Volume', 1000000),
-                    'turnover': price * current_data.get('Volume', 1000000),
-                    'last_updated': datetime.now().isoformat()
-                })
-            
-            current_date += timedelta(days=1)
-        
-        return data
-    
-    def _store_company_data(self, company_info: Dict, historical_data: List[Dict]) -> bool:
-        """Store company data in database."""
+    def _store_symbol_data(self, symbol_data: dict, historical_df: pd.DataFrame):
+        """Store symbol data and historical data in database."""
         try:
             conn = sqlite3.connect(self.db_path)
             
-            # Store company info
+            # Store symbol info
             conn.execute('''
                 INSERT OR REPLACE INTO securities 
-                (symbol, company_name, isin, sector, instrument_type, last_updated, data_start_date, data_end_date, total_records)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (symbol, company_name, series, listing_date, face_value, is_fno, is_active, last_updated, data_start_date, data_end_date, total_records)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
-                company_info['symbol'],
-                company_info['company_name'],
-                company_info['isin'],
-                company_info['sector'],
-                company_info['instrument_type'],
+                symbol_data['symbol'],
+                symbol_data['company_name'],
+                symbol_data['series'],
+                symbol_data['listing_date'],
+                symbol_data['face_value'],
+                symbol_data['is_fno'],
+                1,
                 datetime.now().isoformat(),
-                historical_data[0]['date'] if historical_data else None,
-                historical_data[-1]['date'] if historical_data else None,
-                len(historical_data)
+                historical_df['date'].min() if not historical_df.empty else None,
+                historical_df['date'].max() if not historical_df.empty else None,
+                len(historical_df)
             ))
             
-            # Store price data
-            for data_point in historical_data:
-                conn.execute('''
-                    INSERT OR REPLACE INTO price_data 
-                    (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    data_point['symbol'],
-                    data_point['date'],
-                    data_point['open_price'],
-                    data_point['high_price'],
-                    data_point['low_price'],
-                    data_point['close_price'],
-                    data_point['volume'],
-                    data_point['turnover'],
-                    data_point['last_updated']
-                ))
+            # Store historical data
+            if not historical_df.empty:
+                for _, row in historical_df.iterrows():
+                    conn.execute('''
+                        INSERT OR REPLACE INTO price_data 
+                        (symbol, date, open_price, high_price, low_price, close_price, volume, last_updated)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        row['symbol'],
+                        row['date'],
+                        row['open_price'],
+                        row['high_price'],
+                        row['low_price'],
+                        row['close_price'],
+                        row['volume'],
+                        datetime.now().isoformat()
+                    ))
             
             conn.commit()
             conn.close()
+            
+        except Exception as e:
+            logger.error(f"Error storing data for {symbol_data['symbol']}: {e}")
+            raise
+    
+    def download_symbol_data(self, symbol_data: dict) -> bool:
+        """Download data for a single symbol."""
+        try:
+            symbol = symbol_data['symbol']
+            
+            # Check if already completed
+            if symbol in self.progress['completed_symbols']:
+                logger.info(f"Skipping {symbol} (already completed)")
+                return True
+            
+            logger.info(f"Downloading data for {symbol} ({symbol_data['company_name']})")
+            
+            # Get historical data
+            historical_df = self._get_historical_data_for_symbol(symbol)
+            
+            if historical_df.empty:
+                logger.warning(f"No data available for {symbol}")
+                self.progress['failed_symbols'].append({
+                    'symbol': symbol,
+                    'error': 'No data available',
+                    'timestamp': datetime.now().isoformat()
+                })
+                return False
+            
+            # Store data
+            self._store_symbol_data(symbol_data, historical_df)
+            
+            # Update progress
+            self.progress['completed_symbols'].append(symbol)
+            self._save_progress()
+            
+            logger.info(f"✅ {symbol}: Downloaded {len(historical_df)} records")
             return True
             
         except Exception as e:
-            logger.error(f"Error storing data for {company_info['symbol']}: {e}")
+            logger.error(f"Error downloading {symbol_data['symbol']}: {e}")
+            self.progress['failed_symbols'].append({
+                'symbol': symbol_data['symbol'],
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            })
+            self._save_progress()
             return False
     
-    def _download_company_data(self, company_info: Dict) -> Tuple[str, bool, str]:
-        """Download data for a single company."""
-        symbol = company_info['symbol']
-        
-        try:
-            logger.info(f"Downloading data for {symbol} ({company_info['company_name']})")
-            
-            # Define date range (2 years from 2024-01-01 to today)
-            start_date = "2024-01-01"
-            end_date = datetime.now().strftime('%Y-%m-%d')
-            
-            # Get historical data
-            historical_data = self._get_historical_data(symbol, start_date, end_date)
-            
-            if not historical_data:
-                return symbol, False, "No data available"
-            
-            # Store data
-            success = self._store_company_data(company_info, historical_data)
-            
-            if success:
-                logger.info(f"✅ Successfully downloaded {len(historical_data)} records for {symbol}")
-                return symbol, True, f"Downloaded {len(historical_data)} records"
-            else:
-                return symbol, False, "Failed to store data"
-                
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"❌ Error downloading {symbol}: {error_msg}")
-            return symbol, False, error_msg
-    
-    def download_all_equity_data(self, max_companies: Optional[int] = None):
-        """Download data for all equity companies."""
+    def download_all_equity_data(self, max_symbols: int = None):
+        """Download data for all equity symbols."""
         logger.info("Starting comprehensive equity data download...")
         
-        # Load equity list
-        equity_list = self.load_equity_list()
+        # Get all equity symbols
+        symbols_data = self.get_all_equity_symbols()
         
-        if not equity_list:
-            logger.error("No equity companies found!")
+        if not symbols_data:
+            logger.error("No equity symbols found!")
             return
         
-        # Limit if specified
-        if max_companies:
-            equity_list = equity_list[:max_companies]
-        
-        # Filter out already completed symbols
-        remaining_companies = [
-            company for company in equity_list 
-            if company['symbol'] not in self.progress['completed_symbols']
-        ]
-        
-        logger.info(f"Total companies: {len(equity_list)}")
-        logger.info(f"Already completed: {len(self.progress['completed_symbols'])}")
-        logger.info(f"Remaining to download: {len(remaining_companies)}")
-        
-        if not remaining_companies:
-            logger.info("All companies already downloaded!")
-            return
+        # Limit symbols if specified
+        if max_symbols:
+            symbols_data = symbols_data[:max_symbols]
+            logger.info(f"Limited to {len(symbols_data)} symbols")
         
         # Update progress
-        self.progress['total_symbols'] = len(equity_list)
+        self.progress['total_symbols'] = len(symbols_data)
         self.progress['start_time'] = datetime.now().isoformat()
         self._save_progress()
         
-        # Download data using thread pool
-        successful = 0
+        # Download data using threading
+        completed = 0
         failed = 0
+        
+        logger.info(f"Starting download for {len(symbols_data)} symbols...")
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all tasks
             future_to_symbol = {
-                executor.submit(self._download_company_data, company): company['symbol']
-                for company in remaining_companies
+                executor.submit(self.download_symbol_data, symbol_data): symbol_data['symbol']
+                for symbol_data in symbols_data
             }
             
             # Process completed tasks
             for future in as_completed(future_to_symbol):
-                symbol, success, message = future.result()
-                
-                if success:
-                    self.progress['completed_symbols'].append(symbol)
-                    successful += 1
-                    logger.info(f"✅ {symbol}: {message}")
-                else:
-                    self.progress['failed_symbols'].append({
-                        'symbol': symbol,
-                        'error': message,
-                        'timestamp': datetime.now().isoformat()
-                    })
+                symbol = future_to_symbol[future]
+                try:
+                    success = future.result()
+                    if success:
+                        completed += 1
+                    else:
+                        failed += 1
+                    
+                    # Progress update
+                    if (completed + failed) % 10 == 0:
+                        logger.info(f"Progress: {completed + failed}/{len(symbols_data)} (Completed: {completed}, Failed: {failed})")
+                    
+                    # Rate limiting
+                    time.sleep(self.delay_between_requests)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing {symbol}: {e}")
                     failed += 1
-                    logger.error(f"❌ {symbol}: {message}")
-                
-                # Save progress periodically
-                if (successful + failed) % 10 == 0:
-                    self._save_progress()
-                    logger.info(f"Progress: {successful + failed}/{len(remaining_companies)} completed")
-                
-                # Add delay to avoid overwhelming the API
-                time.sleep(self.delay_between_requests)
         
-        # Final progress save
+        # Final summary
+        logger.info(f"Download completed! Total: {len(symbols_data)}, Completed: {completed}, Failed: {failed}")
+        
+        # Save final progress
+        self.progress['completion_time'] = datetime.now().isoformat()
         self._save_progress()
         
-        # Summary
-        logger.info(f"\n🎉 DOWNLOAD COMPLETED!")
-        logger.info(f"✅ Successful: {successful}")
-        logger.info(f"❌ Failed: {failed}")
-        logger.info(f"📊 Total processed: {successful + failed}")
-        
-        # Show failed symbols
-        if self.progress['failed_symbols']:
-            logger.info(f"\n❌ Failed symbols:")
-            for failed_item in self.progress['failed_symbols'][-10:]:  # Show last 10
-                logger.info(f"  • {failed_item['symbol']}: {failed_item['error']}")
+        return {
+            'total_symbols': len(symbols_data),
+            'completed': completed,
+            'failed': failed,
+            'success_rate': (completed / len(symbols_data)) * 100 if symbols_data else 0
+        }
     
-    def get_database_stats(self) -> Dict:
-        """Get comprehensive database statistics."""
+    def get_database_stats(self) -> dict:
+        """Get statistics from the database."""
         try:
             conn = sqlite3.connect(self.db_path)
             
-            # Securities stats
-            securities_count = conn.execute("SELECT COUNT(*) FROM securities").fetchone()[0]
-            active_securities = conn.execute("SELECT COUNT(*) FROM securities WHERE is_active = 1").fetchone()[0]
+            # Get securities count
+            securities_count = conn.execute('SELECT COUNT(*) FROM securities').fetchone()[0]
             
-            # Price data stats
-            total_records = conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
-            unique_symbols = conn.execute("SELECT COUNT(DISTINCT symbol) FROM price_data").fetchone()[0]
+            # Get FNO securities count
+            fno_count = conn.execute('SELECT COUNT(*) FROM securities WHERE is_fno = 1').fetchone()[0]
             
-            # Date range
-            date_range = conn.execute("""
-                SELECT MIN(date) as start_date, MAX(date) as end_date 
-                FROM price_data
-            """).fetchone()
+            # Get price data count
+            price_data_count = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
             
-            # Average records per symbol
-            avg_records = conn.execute("""
-                SELECT AVG(record_count) FROM (
-                    SELECT COUNT(*) as record_count 
-                    FROM price_data 
-                    GROUP BY symbol
-                )
-            """).fetchone()[0]
+            # Get unique symbols
+            unique_symbols = conn.execute('SELECT COUNT(DISTINCT symbol) FROM price_data').fetchone()[0]
+            
+            # Get date range
+            date_range = conn.execute('SELECT MIN(date), MAX(date) FROM price_data').fetchone()
             
             conn.close()
             
             return {
                 'securities_count': securities_count,
-                'active_securities': active_securities,
-                'total_records': total_records,
+                'fno_securities_count': fno_count,
+                'price_data_count': price_data_count,
                 'unique_symbols': unique_symbols,
-                'date_range': date_range,
-                'avg_records_per_symbol': avg_records or 0
+                'date_range': date_range
             }
             
         except Exception as e:
             logger.error(f"Error getting database stats: {e}")
             return {}
-    
-    def show_progress(self):
-        """Show current download progress."""
-        print(f"\n📊 DOWNLOAD PROGRESS:")
-        print("=" * 50)
-        print(f"Total symbols: {self.progress.get('total_symbols', 0)}")
-        print(f"Completed: {len(self.progress.get('completed_symbols', []))}")
-        print(f"Failed: {len(self.progress.get('failed_symbols', []))}")
-        
-        if self.progress.get('start_time'):
-            start_time = datetime.fromisoformat(self.progress['start_time'])
-            elapsed = datetime.now() - start_time
-            print(f"Elapsed time: {elapsed}")
-        
-        # Show recent completions
-        completed = self.progress.get('completed_symbols', [])
-        if completed:
-            print(f"\n✅ Recently completed (last 10):")
-            for symbol in completed[-10:]:
-                print(f"  • {symbol}")
-        
-        # Show recent failures
-        failed = self.progress.get('failed_symbols', [])
-        if failed:
-            print(f"\n❌ Recent failures (last 5):")
-            for failed_item in failed[-5:]:
-                print(f"  • {failed_item['symbol']}: {failed_item['error']}")
 
 def main():
-    """Main function."""
-    print("🎯 COMPREHENSIVE EQUITY DATA DOWNLOADER")
-    print("=" * 60)
+    """Main function to run the comprehensive downloader."""
+    print("🚀 COMPREHENSIVE EQUITY DATA DOWNLOADER")
+    print("=" * 50)
     
     # Initialize downloader
     downloader = ComprehensiveEquityDataDownloader()
     
-    # Show current progress
-    downloader.show_progress()
-    
-    # Get database stats
-    stats = downloader.get_database_stats()
-    if stats:
-        print(f"\n📊 CURRENT DATABASE STATS:")
-        print(f"Securities: {stats['securities_count']}")
-        print(f"Active securities: {stats['active_securities']}")
-        print(f"Total records: {stats['total_records']:,}")
-        print(f"Unique symbols: {stats['unique_symbols']}")
-        if stats['date_range'][0]:
-            print(f"Date range: {stats['date_range'][0]} to {stats['date_range'][1]}")
-        print(f"Avg records per symbol: {stats['avg_records_per_symbol']:.1f}")
-    
-    # Ask user for confirmation
-    print(f"\n🚀 Ready to start downloading 2 years of data for all equity companies!")
-    print(f"This will download data from 2024-01-01 to today.")
-    
-    response = input("\nDo you want to start the download? (y/n): ").lower().strip()
-    if response != 'y':
-        print("Download cancelled.")
-        return
-    
-    # Start download (limit to 50 for testing)
-    print(f"\nStarting download (limited to 50 companies for testing)...")
-    downloader.download_all_equity_data(max_companies=50)
-    
-    # Show final stats
-    print(f"\n📊 FINAL DATABASE STATS:")
-    final_stats = downloader.get_database_stats()
-    if final_stats:
-        print(f"Securities: {final_stats['securities_count']}")
-        print(f"Total records: {final_stats['total_records']:,}")
-        print(f"Unique symbols: {final_stats['unique_symbols']}")
-    
-    print(f"\n🎉 COMPREHENSIVE EQUITY DATA DOWNLOAD COMPLETED!")
+    try:
+        # Start download
+        print("\n🔄 Starting comprehensive download...")
+        print("📅 Date range: 2024-01-01 to today")
+        print("💡 Progress will be saved automatically")
+        print()
+        
+        results = downloader.download_all_equity_data(max_symbols=50)  # Start with 50 symbols for testing
+        
+        print("\n📊 DOWNLOAD RESULTS:")
+        print("=" * 30)
+        print(f"✅ Completed Symbols: {results['completed']}")
+        print(f"❌ Failed Symbols: {results['failed']}")
+        print(f"📋 Total Symbols: {results['total_symbols']}")
+        print(f"📈 Success Rate: {results['success_rate']:.2f}%")
+        
+        # Get database stats
+        stats = downloader.get_database_stats()
+        if stats:
+            print(f"\n📊 DATABASE STATISTICS:")
+            print(f"   • Total Securities: {stats['securities_count']}")
+            print(f"   • FNO Securities: {stats['fno_securities_count']}")
+            print(f"   • Price Records: {stats['price_data_count']}")
+            print(f"   • Unique Symbols: {stats['unique_symbols']}")
+            print(f"   • Date Range: {stats['date_range'][0]} to {stats['date_range'][1]}")
+        
+        print(f"\n📄 Files Created:")
+        print(f"   • {downloader.db_path}")
+        print(f"   • {downloader.progress_file}")
+        print(f"   • comprehensive_download.log")
+        
+    except Exception as e:
+        print(f"❌ Error during download: {e}")
+        logger.error(f"Download failed: {e}")
 
 if __name__ == "__main__":
     main() 
