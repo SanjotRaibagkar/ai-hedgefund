@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """
 Run Full Download
-Downloads data for all NSE equity symbols.
+Downloads data for all NSE equity symbols using optimized downloader.
 """
 
-from comprehensive_equity_data_downloader import ComprehensiveEquityDataDownloader
+from src.data.downloaders.optimized_equity_downloader import OptimizedEquityDataDownloader
 
 def main():
     """Run the full download for all symbols."""
-    print("🚀 STARTING FULL NSE EQUITY DATA DOWNLOAD")
+    print("🚀 STARTING FULL NSE EQUITY DATA DOWNLOAD (OPTIMIZED)")
     print("=" * 60)
     
     # Initialize downloader
-    downloader = ComprehensiveEquityDataDownloader()
+    downloader = OptimizedEquityDataDownloader()
     
     try:
         # Start download for ALL symbols (no limit)
         print("\n🔄 Starting full download for ALL NSE equity symbols...")
         print("📅 Date range: 2024-01-01 to today")
-        print("⏱️ Estimated time: 2-3 hours for all symbols")
+        print("⏱️ Estimated time: 1-2 hours for all symbols (optimized)")
         print("💡 Progress will be saved automatically")
         print("🔄 System will resume from where it left off if interrupted")
         print()
         
-        results = downloader.download_all_equity_data()  # No max_symbols limit
+        results = downloader.download_all_equity_data()  # No max_companies limit
         
         print("\n📊 FULL DOWNLOAD RESULTS:")
         print("=" * 40)
@@ -45,7 +45,7 @@ def main():
         print(f"\n📄 Files Created:")
         print(f"   • {downloader.db_path}")
         print(f"   • {downloader.progress_file}")
-        print(f"   • comprehensive_download.log")
+        print(f"   • optimized_equity_download.log")
         
         print(f"\n🎉 FULL DOWNLOAD COMPLETED SUCCESSFULLY!")
         

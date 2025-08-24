@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Test Comprehensive Equity Data Downloader
+Test Optimized Equity Data Downloader
 """
 
-from comprehensive_equity_data_downloader import ComprehensiveEquityDataDownloader
+from src.data.downloaders.optimized_equity_downloader import OptimizedEquityDataDownloader
 
 def main():
-    """Test the comprehensive equity data downloader."""
-    print("🎯 TESTING COMPREHENSIVE EQUITY DATA DOWNLOADER")
+    """Test the optimized equity data downloader."""
+    print("🎯 TESTING OPTIMIZED EQUITY DATA DOWNLOADER")
     print("=" * 60)
     
     # Initialize downloader
-    downloader = ComprehensiveEquityDataDownloader()
+    downloader = OptimizedEquityDataDownloader()
     
     # Show current progress
     downloader.show_progress()

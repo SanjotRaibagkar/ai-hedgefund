@@ -13,7 +13,7 @@ from typing import Dict, List, Any
 import json
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from loguru import logger
 
@@ -126,9 +126,9 @@ class ComprehensiveTestRunner:
         
         # Check for required documentation files
         required_files = [
-            'README.md',
-            'USAGE.md',
-            'PHASE4_COMPLETION_SUMMARY.md',
+            'docs/README.md',
+            'docs/USAGE_GUIDE.md',
+            'docs/PHASE4_COMPLETION_SUMMARY.md',
             'pyproject.toml'
         ]
         

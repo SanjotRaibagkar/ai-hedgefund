@@ -29,7 +29,7 @@ def test_core_imports():
         ('src.screening.simple_eod_screener', 'SimpleEODScreener'),
         ('src.screening.screening_manager', 'ScreeningManager'),
         ('src.ui.web_app.app', 'app'),
-        ('src.data.downloaders.comprehensive_equity_data_downloader', 'ComprehensiveEquityDataDownloader'),
+        ('src.data.downloaders.optimized_equity_downloader', 'OptimizedEquityDataDownloader'),
         ('src.utils.database_stats_utility', 'show_comprehensive_stats'),
         ('src.tools.enhanced_api', 'get_prices'),
         ('src.ui.branding', 'print_logo'),

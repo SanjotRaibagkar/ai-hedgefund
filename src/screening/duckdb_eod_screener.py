@@ -84,10 +84,19 @@ class DuckDBEODScreener:
                 table_names = [table[0] for table in tables]
                 
                 if 'securities' in table_names:
-                    symbols = pd.read_sql_query(
-                        "SELECT symbol FROM securities WHERE is_active = true", 
-                        conn
-                    )['symbol'].tolist()
+                    # Check if securities table has data
+                    securities_count = conn.execute("SELECT COUNT(*) FROM securities").fetchone()[0]
+                    if securities_count > 0:
+                        symbols = pd.read_sql_query(
+                            "SELECT symbol FROM securities WHERE is_active = true", 
+                            conn
+                        )['symbol'].tolist()
+                    else:
+                        # Securities table exists but is empty, use price_data
+                        symbols = pd.read_sql_query(
+                            "SELECT DISTINCT symbol FROM price_data", 
+                            conn
+                        )['symbol'].tolist()
                 else:
                     # Fallback to price_data table
                     symbols = pd.read_sql_query(

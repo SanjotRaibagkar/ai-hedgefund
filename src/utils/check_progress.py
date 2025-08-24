@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
 Check Download Progress
-Shows current progress of the comprehensive download.
+Shows current progress of the optimized download.
 """
 
 import json
-from comprehensive_equity_data_downloader import ComprehensiveEquityDataDownloader
+from src.data.downloaders.optimized_equity_downloader import OptimizedEquityDataDownloader
 
 def main():
     """Check and display current progress."""
-    print("📊 COMPREHENSIVE DOWNLOAD PROGRESS")
+    print("📊 OPTIMIZED DOWNLOAD PROGRESS")
     print("=" * 40)
     
     # Check progress file
     try:
-        with open('comprehensive_progress.json', 'r') as f:
+        with open('optimized_download_progress.json', 'r') as f:
             progress = json.load(f)
         
         completed = len(progress['completed_symbols'])
@@ -34,7 +34,7 @@ def main():
     
     # Check database stats
     try:
-        downloader = ComprehensiveEquityDataDownloader()
+        downloader = OptimizedEquityDataDownloader()
         stats = downloader.get_database_stats()
         
         print(f"\n🗄️ Database Statistics:")
