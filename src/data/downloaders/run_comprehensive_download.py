@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Non-Interactive Comprehensive Equity Data Downloader
+Non-Interactive Optimized Equity Data Downloader
 Runs automatically without user input for batch processing.
 """
 
-from comprehensive_equity_data_downloader import ComprehensiveEquityDataDownloader
+from src.data.downloaders.optimized_equity_downloader import OptimizedEquityDataDownloader
 import sys
 
 def main():
-    """Run the comprehensive equity data downloader automatically."""
-    print("🎯 NON-INTERACTIVE COMPREHENSIVE EQUITY DATA DOWNLOADER")
+    """Run the optimized equity data downloader automatically."""
+    print("🎯 NON-INTERACTIVE OPTIMIZED EQUITY DATA DOWNLOADER")
     print("=" * 70)
     
     # Initialize downloader
-    downloader = ComprehensiveEquityDataDownloader()
+    downloader = OptimizedEquityDataDownloader()
     
     # Show current progress
     downloader.show_progress()
@@ -53,7 +53,7 @@ def main():
         print(f"Total records: {final_stats['total_records']:,}")
         print(f"Unique symbols: {final_stats['unique_symbols']}")
     
-    print(f"\n🎉 COMPREHENSIVE EQUITY DATA DOWNLOAD COMPLETED!")
+    print(f"\n🎉 OPTIMIZED EQUITY DATA DOWNLOAD COMPLETED!")
     print(f"📁 Database saved to: {downloader.db_path}")
     print(f"📄 Progress saved to: {downloader.progress_file}")
 

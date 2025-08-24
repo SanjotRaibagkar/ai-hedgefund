@@ -35,6 +35,7 @@ from src.data.providers.provider_factory import (
     get_market_data_provider,
     get_nse_utility_provider
 )
+from src.data.providers.duckdb_provider import DuckDBProvider
 from src.data.providers.base_provider import DataProviderError
 
 # Global cache instance
@@ -122,7 +123,12 @@ def get_prices(ticker: str, start_date: str, end_date: str) -> Union[List[Dict],
         List of price dictionaries or DataFrame
     """
     try:
-        # Get the appropriate provider
+        # For Indian stocks, use DuckDB provider for comprehensive historical data
+        if _is_indian_ticker(ticker):
+            duckdb_provider = DuckDBProvider()
+            return duckdb_provider.get_prices_as_dataframe(ticker, start_date, end_date)
+        
+        # For other stocks, use the standard provider
         provider = get_provider_for_ticker(ticker)
         
         # For Indian stocks, use the DataFrame method for better compatibility

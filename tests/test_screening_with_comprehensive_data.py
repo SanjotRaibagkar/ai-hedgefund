@@ -8,7 +8,7 @@ import pandas as pd
 import sqlite3
 import time
 from datetime import datetime
-from src.screening.simple_eod_screener import SimpleEODScreener
+from src.screening.duckdb_eod_screener import DuckDBEODScreener
 
 def test_screening_with_comprehensive_data():
     """Test the screening system with comprehensive data."""
@@ -16,7 +16,7 @@ def test_screening_with_comprehensive_data():
     print("=" * 60)
     
     # Initialize screener
-    screener = SimpleEODScreener()
+    screener = DuckDBEODScreener()
     
     # Get database stats
     print("📊 Database Statistics:")

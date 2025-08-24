@@ -12,7 +12,7 @@ from typing import Dict, List, Any
 import json
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from loguru import logger
 from src.tools.enhanced_api import get_prices, get_financial_metrics, get_market_cap

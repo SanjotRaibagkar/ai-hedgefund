@@ -54,8 +54,8 @@ class FeatureEngineer:
                 'trend_features': True
             },
             'fundamental_features': {
-                'valuation_features': True,
-                'financial_features': True
+                'valuation_features': False,  # Disabled since fundamental data not available
+                'financial_features': False   # Disabled since fundamental data not available
             },
             'derived_features': {
                 'interaction_features': True,
@@ -94,18 +94,28 @@ class FeatureEngineer:
             # Create technical features
             technical_features = self._create_technical_features(prices_df)
             
-            # Create fundamental features
+            # Create fundamental features (will be empty if not available)
             fundamental_features = self._create_fundamental_features(ticker, start_date, end_date)
             
             # Create derived features
             derived_features = self._create_derived_features(prices_df, technical_features)
             
+            # Combine features - only include non-empty DataFrames
+            feature_list = [technical_features]
+            
+            # Only add fundamental features if they're not empty
+            if not fundamental_features.empty:
+                feature_list.append(fundamental_features)
+                logger.info(f"Added fundamental features for {ticker}")
+            else:
+                logger.info(f"No fundamental features available for {ticker}, using technical features only")
+            
+            # Only add derived features if they're not empty
+            if not derived_features.empty:
+                feature_list.append(derived_features)
+            
             # Combine all features
-            all_features = pd.concat([
-                technical_features,
-                fundamental_features,
-                derived_features
-            ], axis=1)
+            all_features = pd.concat(feature_list, axis=1)
             
             # Create target variable
             target = self._create_target(prices_df, target_column, target_horizon)
@@ -279,8 +289,8 @@ class FeatureEngineer:
             
             # Get fundamental data
             fundamental_data = get_financial_metrics(ticker, end_date)
-            if fundamental_data is None:
-                logger.warning(f"No fundamental data available for {ticker}")
+            if fundamental_data is None or len(fundamental_data) == 0:
+                logger.debug(f"No fundamental data available for {ticker} - skipping fundamental features")
                 return features
             
             # Valuation features
@@ -291,10 +301,16 @@ class FeatureEngineer:
             if self.feature_config['fundamental_features']['financial_features']:
                 features = self._add_financial_features(features, fundamental_data)
             
+            # Check if we actually got any features
+            if features.empty:
+                logger.debug(f"Fundamental data available but no features created for {ticker}")
+            else:
+                logger.debug(f"Created {features.shape[1]} fundamental features for {ticker}")
+            
             return features
             
         except Exception as e:
-            logger.error(f"Fundamental feature creation failed: {e}")
+            logger.debug(f"Fundamental feature creation failed for {ticker}: {e}")
             return pd.DataFrame()
     
     def _add_valuation_features(self, features: pd.DataFrame, data: Any) -> pd.DataFrame:
