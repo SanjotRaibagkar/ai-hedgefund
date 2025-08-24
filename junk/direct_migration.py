@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-Final migration from SQLite to DuckDB using ATTACH
-Direct data copy using DuckDB's ATTACH functionality
+Direct migration from SQLite to DuckDB using ATTACH
+Copy data directly from sqlite_backup/comprehensive_equity.db to comprehensive_equity.duckdb
 """
 
 import duckdb
-import pandas as pd
 from loguru import logger
 
-def final_migration():
-    """Final migration using DuckDB ATTACH."""
-    logger.info("🚀 Final migration using DuckDB ATTACH...")
+def direct_migration():
+    """Direct migration using DuckDB ATTACH."""
+    logger.info("🚀 Direct migration using DuckDB ATTACH...")
     
     try:
         # Connect to DuckDB
@@ -33,33 +32,33 @@ def final_migration():
         
         # Get counts from SQLite
         price_count_sqlite = conn.execute("SELECT COUNT(*) FROM sqlite_db.price_data").fetchone()[0]
-        securities_count_sqlite = conn.execute("SELECT COUNT(*) FROM sqlite_db.securities").fetchone()[0]
         
         logger.info(f"📊 SQLite data:")
         logger.info(f"   📈 Price records: {price_count_sqlite:,}")
-        logger.info(f"   📋 Securities records: {securities_count_sqlite:,}")
         
-        # Clear existing data in DuckDB
-        logger.info("🧹 Clearing existing data...")
+        # Delete securities table if it exists
+        logger.info("🗑️ Deleting securities table...")
+        try:
+            conn.execute("DROP TABLE IF EXISTS securities")
+            logger.info("   ✅ Securities table deleted")
+        except Exception as e:
+            logger.info(f"   ⚠️ Could not delete securities table: {e}")
+        
+        # Clear existing price_data
+        logger.info("🧹 Clearing existing price_data...")
         conn.execute("DELETE FROM price_data")
-        conn.execute("DELETE FROM securities")
         
-        # Copy data directly using ATTACH
+        # Copy price_data directly using ATTACH
         logger.info("📥 Copying price_data...")
         conn.execute("INSERT INTO price_data SELECT * FROM sqlite_db.price_data")
         
-        logger.info("📥 Copying securities...")
-        conn.execute("INSERT INTO securities SELECT * FROM sqlite_db.securities")
-        
         # Verify the copy
         price_count_duckdb = conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
-        securities_count_duckdb = conn.execute("SELECT COUNT(*) FROM securities").fetchone()[0]
         symbol_count = conn.execute("SELECT COUNT(DISTINCT symbol) FROM price_data").fetchone()[0]
         
         logger.info(f"✅ Migration complete!")
         logger.info(f"   📊 Price records: {price_count_duckdb:,}")
         logger.info(f"   🏢 Unique symbols: {symbol_count:,}")
-        logger.info(f"   📋 Securities records: {securities_count_duckdb:,}")
         
         # Test foreign key constraints
         logger.info("🔗 Testing foreign key constraints...")
@@ -94,4 +93,4 @@ def final_migration():
         return False
 
 if __name__ == "__main__":
-    final_migration()
+    direct_migration()
