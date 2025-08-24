@@ -1,1 +1,0 @@
-[33m5fbf7b7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Major cleanup: Remove old downloaders, consolidate to optimized_equity_downloader, add junk folder to gitignore
