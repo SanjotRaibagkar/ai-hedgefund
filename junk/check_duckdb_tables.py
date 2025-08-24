@@ -11,7 +11,7 @@ import duckdb
 
 def check_duckdb_tables():
     """Check DuckDB table structure."""
-    conn = duckdb.connect('data/optimized_equity.duckdb')
+    conn = duckdb.connect('data/comprehensive_equity.duckdb')
     
     print("🗄️ DUCKDB TABLE ANALYSIS")
     print("=" * 50)
