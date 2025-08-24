@@ -167,3 +167,39 @@ class DuckDBProvider(BaseDataProvider):
         except Exception as e:
             logger.error(f"Error getting data range: {e}")
             return {}
+
+    # Required abstract methods from BaseDataProvider
+    def get_financial_metrics(self, ticker: str, end_date: str, period: str = "ttm", limit: int = 10):
+        """Get financial metrics for a ticker."""
+        logger.warning(f"Financial metrics not available in DuckDB provider for {ticker}")
+        return []
+    
+    def get_line_items(self, ticker: str, line_items: List[str], end_date: str, period: str = "ttm", limit: int = 10):
+        """Get specific financial line items for a ticker."""
+        logger.warning(f"Line items not available in DuckDB provider for {ticker}")
+        return []
+    
+    def get_market_cap(self, ticker: str, end_date: str):
+        """Get market capitalization for a ticker."""
+        logger.warning(f"Market cap not available in DuckDB provider for {ticker}")
+        return None
+    
+    def get_company_news(self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 1000):
+        """Get company news for a ticker."""
+        logger.warning(f"Company news not available in DuckDB provider for {ticker}")
+        return []
+    
+    def get_insider_trades(self, ticker: str, end_date: str, start_date: Optional[str] = None, limit: int = 1000):
+        """Get insider trades for a ticker."""
+        logger.warning(f"Insider trades not available in DuckDB provider for {ticker}")
+        return []
+    
+    def supports_ticker(self, ticker: str) -> bool:
+        """Check if this provider supports the given ticker format."""
+        # Support Indian tickers (NSE format)
+        ticker = ticker.upper()
+        return any(ticker.endswith(suffix) for suffix in ['.NS', '.BO', '.NSE', '.BSE']) or '.' not in ticker
+    
+    def get_provider_name(self) -> str:
+        """Get the name of this provider."""
+        return "DuckDB"

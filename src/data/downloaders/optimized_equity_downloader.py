@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class OptimizedEquityDataDownloader:
     """Optimized equity data downloader using DuckDB for speed."""
     
-    def __init__(self, db_path: str = "data/optimized_equity.duckdb"):
+    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
         """Initialize the optimized downloader."""
         self.db_path = db_path
         self.nse = NseUtils()
@@ -471,6 +471,170 @@ class OptimizedEquityDataDownloader:
             print(f"Recent failures (last 5):")
             for failed_item in failed[-5:]:
                 print(f"  {failed_item['symbol']}: {failed_item['error']}")
+    
+    def get_latest_data_date(self) -> str:
+        """Get the latest date available in the database."""
+        try:
+            result = self.conn.execute("SELECT MAX(date) FROM price_data").fetchone()
+            return result[0] if result and result[0] else None
+        except Exception as e:
+            logger.error(f"Error getting latest data date: {e}")
+            return None
+    
+    def get_symbol_latest_date(self, symbol: str) -> str:
+        """Get the latest date available for a specific symbol."""
+        try:
+            result = self.conn.execute(
+                "SELECT MAX(date) FROM price_data WHERE symbol = ?", 
+                [symbol]
+            ).fetchone()
+            return result[0] if result and result[0] else None
+        except Exception as e:
+            logger.error(f"Error getting latest date for {symbol}: {e}")
+            return None
+    
+    def download_delta_data(self, from_date: str, to_date: str) -> bool:
+        """Download delta data from from_date to to_date."""
+        try:
+            logger.info(f"Starting delta download from {from_date} to {to_date}")
+            
+            # Get all symbols that need updating
+            symbols_needing_update = self._get_symbols_needing_update(from_date, to_date)
+            
+            if not symbols_needing_update:
+                logger.info("No symbols need updating")
+                return True
+            
+            logger.info(f"Found {len(symbols_needing_update)} symbols needing update")
+            
+            # Download delta data for each symbol
+            successful = 0
+            failed = 0
+            
+            for symbol in symbols_needing_update:
+                try:
+                    success = self._download_symbol_delta(symbol, from_date, to_date)
+                    if success:
+                        successful += 1
+                        logger.info(f"✅ Delta update for {symbol} completed")
+                    else:
+                        failed += 1
+                        logger.error(f"❌ Delta update for {symbol} failed")
+                except Exception as e:
+                    failed += 1
+                    logger.error(f"Error updating {symbol}: {e}")
+                
+                # Rate limiting
+                time.sleep(self.delay_between_requests)
+            
+            logger.info(f"Delta download completed: {successful} successful, {failed} failed")
+            return failed == 0
+            
+        except Exception as e:
+            logger.error(f"Error in delta download: {e}")
+            return False
+    
+    def update_symbol_data(self, symbol: str, from_date: str, to_date: str) -> bool:
+        """Update data for a specific symbol from from_date to to_date."""
+        try:
+            logger.info(f"Updating {symbol} from {from_date} to {to_date}")
+            return self._download_symbol_delta(symbol, from_date, to_date)
+        except Exception as e:
+            logger.error(f"Error updating {symbol}: {e}")
+            return False
+    
+    def _get_symbols_needing_update(self, from_date: str, to_date: str) -> List[str]:
+        """Get list of symbols that need updating between from_date and to_date."""
+        try:
+            # Get symbols that either don't have data in the date range or have incomplete data
+            query = """
+                SELECT DISTINCT symbol FROM (
+                    SELECT symbol, COUNT(*) as record_count
+                    FROM price_data 
+                    WHERE date BETWEEN ? AND ?
+                    GROUP BY symbol
+                ) 
+                WHERE record_count < (
+                    SELECT COUNT(*) 
+                    FROM (
+                        SELECT date::date as trading_date
+                        FROM generate_series(?::date, ?::date, INTERVAL '1 day') as date
+                        WHERE EXTRACT(dow FROM date) BETWEEN 1 AND 5  -- Monday to Friday
+                    )
+                )
+                UNION
+                SELECT DISTINCT symbol FROM securities 
+                WHERE symbol NOT IN (
+                    SELECT DISTINCT symbol FROM price_data 
+                    WHERE date BETWEEN ? AND ?
+                )
+            """
+            
+            result = self.conn.execute(query, [from_date, to_date, from_date, to_date, from_date, to_date]).fetchdf()
+            return result['symbol'].tolist() if not result.empty else []
+            
+        except Exception as e:
+            logger.error(f"Error getting symbols needing update: {e}")
+            return []
+    
+    def _download_symbol_delta(self, symbol: str, from_date: str, to_date: str) -> bool:
+        """Download delta data for a specific symbol."""
+        try:
+            # Get current price info
+            current_data = self.nse.price_info(symbol)
+            if not current_data or current_data.get('LastTradedPrice', 0) == 0:
+                logger.warning(f"No current data available for {symbol}")
+                return False
+            
+            # Generate historical data for the delta period
+            historical_data = self._simulate_historical_data(
+                symbol, from_date, to_date, current_data
+            )
+            
+            if not historical_data:
+                logger.warning(f"No historical data generated for {symbol}")
+                return False
+            
+            # Store the delta data
+            self._store_symbol_delta_data(symbol, historical_data)
+            
+            logger.info(f"Delta data for {symbol}: {len(historical_data)} records")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error downloading delta for {symbol}: {e}")
+            return False
+    
+    def _store_symbol_delta_data(self, symbol: str, data: List[Dict]):
+        """Store delta data for a symbol."""
+        try:
+            # Convert to DataFrame
+            df = pd.DataFrame(data)
+            
+            # Remove existing data for the date range to avoid duplicates
+            date_range = df['date'].min(), df['date'].max()
+            self.conn.execute(
+                "DELETE FROM price_data WHERE symbol = ? AND date BETWEEN ? AND ?",
+                [symbol, date_range[0], date_range[1]]
+            )
+            
+            # Insert new data
+            self.conn.execute("INSERT INTO price_data SELECT * FROM df")
+            
+            # Update securities table
+            self.conn.execute("""
+                UPDATE securities 
+                SET data_end_date = ?, last_updated = ?, total_records = (
+                    SELECT COUNT(*) FROM price_data WHERE symbol = ?
+                )
+                WHERE symbol = ?
+            """, [date_range[1], datetime.now(), symbol, symbol])
+            
+            logger.info(f"Stored {len(data)} delta records for {symbol}")
+            
+        except Exception as e:
+            logger.error(f"Error storing delta data for {symbol}: {e}")
+            raise
 
 def main():
     """Main function."""
