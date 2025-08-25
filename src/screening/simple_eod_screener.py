@@ -78,10 +78,9 @@ class SimpleEODScreener:
     async def _get_all_symbols(self) -> List[str]:
         """Get all symbols from database."""
         with duckdb.connect(self.db_path) as conn:
-            symbols = pd.read_sql_query(
-                "SELECT symbol FROM securities WHERE is_active = true", 
-                conn
-            )['symbol'].tolist()
+            symbols = conn.execute(
+                "SELECT DISTINCT symbol FROM price_data"
+            ).fetchdf()['symbol'].tolist()
         return symbols
     
     async def _screen_symbols_concurrent(self, 
@@ -120,27 +119,21 @@ class SimpleEODScreener:
                             symbol: str,
                             min_volume: int,
                             min_price: float) -> Optional[Dict]:
-        """Screen a single symbol using existing NSEUtility."""
+        """Screen a single symbol using historical data."""
         try:
-            # Get current data from existing NSEUtility
-            from src.nsedata.NseUtility import NseUtils
-            nse = NseUtils()
-            
-            price_info = nse.price_info(symbol)
-            if not price_info:
-                return None
-            
-            current_price = float(price_info.get('LastTradedPrice', 0))
-            volume = int(price_info.get('Volume', 0))
-            
-            # Apply filters
-            if volume < min_volume or current_price < min_price:
-                return None
-            
             # Get historical data from database
             historical_data = self._get_historical_data(symbol)
             
-            if historical_data.empty:
+            if historical_data.empty or len(historical_data) < 30:
+                return None
+            
+            # Get current price and volume from latest data
+            current_price = historical_data['close_price'].iloc[-1]
+            volume = historical_data['volume'].iloc[-1]
+            avg_volume = historical_data['volume'].rolling(20).mean().iloc[-1]
+            
+            # Apply filters
+            if avg_volume < min_volume or current_price < min_price:
                 return None
             
             # Calculate indicators
@@ -166,6 +159,7 @@ class SimpleEODScreener:
                 'risk_reward_ratio': levels['risk_reward'],
                 'current_price': current_price,
                 'volume': volume,
+                'avg_volume': avg_volume,
                 'screening_date': datetime.now().isoformat()
             }
             
@@ -184,7 +178,7 @@ class SimpleEODScreener:
             """
             
             with duckdb.connect(self.db_path) as conn:
-                df = pd.read_sql_query(query, conn, params=[symbol])
+                df = conn.execute(query, [symbol]).fetchdf()
             
             if not df.empty:
                 df['date'] = pd.to_datetime(df['date'])
