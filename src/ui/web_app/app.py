@@ -344,11 +344,23 @@ def run_options_analysis(n_clicks):
                 options_data = nse.get_live_option_chain(index, indices=True)
                 
                 if options_data is not None and not options_data.empty:
-                    # Get spot price
-                    strikes = sorted(options_data['Strike_Price'].unique())
-                    current_price = float(strikes[len(strikes)//2])
+                    # Get spot price from futures data (more accurate)
+                    try:
+                        futures_data = nse.futures_data(index, indices=True)
+                        if futures_data is not None and not futures_data.empty:
+                            # Get the first row (current month contract) for spot price
+                            current_price = float(futures_data['lastPrice'].iloc[0])
+                        else:
+                            # Fallback to options data if futures fails
+                            strikes = sorted(options_data['Strike_Price'].unique())
+                            current_price = float(strikes[len(strikes)//2])
+                    except Exception as e:
+                        # Fallback to options data if futures fails
+                        strikes = sorted(options_data['Strike_Price'].unique())
+                        current_price = float(strikes[len(strikes)//2])
                     
                     # Find ATM strike
+                    strikes = sorted(options_data['Strike_Price'].unique())
                     atm_strike = min(strikes, key=lambda x: abs(x - current_price))
                     
                     # Analyze ATM ± 2 strikes
