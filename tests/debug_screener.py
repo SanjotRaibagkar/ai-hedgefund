@@ -5,7 +5,7 @@ Debug why the screener isn't generating signals.
 """
 
 import asyncio
-from src.screening.simple_eod_screener import SimpleEODScreener
+from src.screening.duckdb_eod_screener import duckdb_eod_screener
 from src.nsedata.NseUtility import NseUtils
 import pandas as pd
 
@@ -14,7 +14,7 @@ async def debug_screener():
     print("🔍 DEBUGGING SCREENER")
     print("=" * 40)
     
-    screener = SimpleEODScreener()
+    screener = duckdb_eod_screener
     symbol = "RELIANCE"
     
     print(f"🎯 Testing symbol: {symbol}")

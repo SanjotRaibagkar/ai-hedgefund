@@ -7,7 +7,7 @@ Tests the screening system with the current data.
 import asyncio
 import sqlite3
 import time
-from src.screening.simple_eod_screener import SimpleEODScreener
+from src.screening.duckdb_eod_screener import duckdb_eod_screener
 
 async def test_screening():
     """Test the screening system."""
@@ -15,7 +15,7 @@ async def test_screening():
     print("=" * 40)
     
     # Initialize screener
-    screener = SimpleEODScreener()
+    screener = duckdb_eod_screener
     
     # Get database stats
     print("📊 Database Statistics:")

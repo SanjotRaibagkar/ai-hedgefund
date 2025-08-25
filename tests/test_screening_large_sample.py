@@ -7,7 +7,7 @@ Tests the screening system with a larger sample to generate more signals.
 import asyncio
 import sqlite3
 import time
-from src.screening.simple_eod_screener import SimpleEODScreener
+from src.screening.duckdb_eod_screener import duckdb_eod_screener
 
 async def test_large_sample_screening():
     """Test screening with a larger sample."""
@@ -15,7 +15,7 @@ async def test_large_sample_screening():
     print("=" * 50)
     
     # Initialize screener
-    screener = SimpleEODScreener()
+    screener = duckdb_eod_screener
     
     # Get larger sample of symbols
     print("🎯 Getting Large Sample of Symbols...")
@@ -99,7 +99,7 @@ async def test_fno_stocks():
     print(f"\n🔥 TESTING FNO STOCKS SCREENING")
     print("=" * 40)
     
-    screener = SimpleEODScreener()
+    screener = duckdb_eod_screener
     
     # Get FNO stocks
     conn = sqlite3.connect("data/comprehensive_equity.db")
