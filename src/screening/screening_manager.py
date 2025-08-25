@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import logging
 import json
 
-from src.screening.eod_screener import EODStockScreener
+from src.screening.unified_eod_screener import unified_eod_screener
 from src.screening.intraday_screener import IntradayStockScreener
 from src.screening.options_analyzer import OptionsAnalyzer
 from src.screening.market_predictor import MarketPredictor
@@ -26,7 +26,7 @@ class ScreeningManager:
         self.logger = logging.getLogger(__name__)
         
         # Initialize all screeners
-        self.eod_screener = EODStockScreener()
+        self.eod_screener = unified_eod_screener
         self.intraday_screener = IntradayStockScreener()
         self.options_analyzer = OptionsAnalyzer()
         self.market_predictor = MarketPredictor()
@@ -76,7 +76,9 @@ class ScreeningManager:
         try:
             # 1. EOD Stock Screening
             self.logger.info("Running EOD stock screening...")
-            eod_results = self.eod_screener.screen_stocks(stock_list)
+            # Convert .NS symbols to regular symbols for unified screener
+            symbols = [s.replace('.NS', '') for s in stock_list]
+            eod_results = self.get_eod_signals(stock_list)
             results['stock_screening']['eod'] = eod_results
             results['summary']['eod_signals'] = (
                 eod_results['summary']['bullish_count'] + 
@@ -136,9 +138,9 @@ class ScreeningManager:
         return results
     
     def get_eod_signals(self, stock_list: Optional[List[str]] = None, 
-                       risk_reward_ratio: float = 2.0) -> Dict[str, Any]:
+                       risk_reward_ratio: float = 2.0, analysis_mode: str = "comprehensive") -> Dict[str, Any]:
         """
-        Get EOD trading signals.
+        Get EOD trading signals using unified screener.
         
         Args:
             stock_list: List of stocks to screen
@@ -150,10 +152,40 @@ class ScreeningManager:
         if stock_list is None:
             stock_list = self.default_indian_stocks
         
-        # Update screener parameters
-        self.eod_screener.risk_reward_ratio = risk_reward_ratio
+        # Convert .NS symbols to regular symbols for unified screener
+        symbols = [s.replace('.NS', '') for s in stock_list]
         
-        return self.eod_screener.screen_stocks(stock_list)
+        # Run unified screener with specified analysis mode
+        import asyncio
+        try:
+            results = asyncio.run(self.eod_screener.screen_universe(
+                symbols=symbols,
+                min_volume=100000,
+                min_price=10.0,
+                analysis_mode=analysis_mode
+            ))
+            
+            # Convert results to expected format
+            return {
+                'summary': {
+                    'total_stocks': results['summary']['total_screened'],
+                    'bullish_count': results['summary']['bullish_signals'],
+                    'bearish_count': results['summary']['bearish_signals']
+                },
+                'bullish_signals': results['bullish_signals'],
+                'bearish_signals': results['bearish_signals']
+            }
+        except Exception as e:
+            self.logger.error(f"Error in EOD screening: {e}")
+            return {
+                'summary': {
+                    'total_stocks': len(symbols),
+                    'bullish_count': 0,
+                    'bearish_count': 0
+                },
+                'bullish_signals': [],
+                'bearish_signals': []
+            }
     
     def get_intraday_signals(self, stock_list: Optional[List[str]] = None) -> Dict[str, Any]:
         """
