@@ -2,10 +2,10 @@
 """
 Enhanced Indian Market Data Manager
 Handles comprehensive data collection, storage, and retrieval for all Indian markets using existing NSEUtility.
+Now uses DuckDB DatabaseManager for improved performance and data consistency.
 """
 
 import asyncio
-import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Set
@@ -14,14 +14,26 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
 import time
 
+# Import DuckDB DatabaseManager
+from .database.duckdb_manager import DatabaseManager
+
 class EnhancedIndianDataManager:
-    """Enhanced Indian market data collection and storage using existing NSEUtility."""
+    """Enhanced Indian market data collection and storage using existing NSEUtility and DuckDB DatabaseManager."""
     
-    def __init__(self, db_path: str = "data/indian_market.db"):
+    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
+        """
+        Initialize Enhanced Indian Data Manager with DuckDB DatabaseManager.
+        
+        Args:
+            db_path: Path to DuckDB database file (defaults to comprehensive database)
+        """
         self.db_path = db_path
         self.db_dir = os.path.dirname(db_path)
         os.makedirs(self.db_dir, exist_ok=True)
-        self._init_database()
+        
+        # Initialize DuckDB DatabaseManager
+        self.db_manager = DatabaseManager(db_path)
+        logger.info(f"✅ DuckDB DatabaseManager initialized with {db_path}")
         
         # Initialize NSEUtility using existing infrastructure
         self.nse_utils = None
@@ -39,65 +51,34 @@ class EnhancedIndianDataManager:
         self.batch_size = 50   # Process symbols in batches
         self.retry_attempts = 3
         self.retry_delay = 1   # seconds
-    
-    def _init_database(self):
-        """Initialize SQLite database with enhanced schema."""
-        logger.info("🔧 Initializing Enhanced Indian Market Database...")
         
-        with sqlite3.connect(self.db_path) as conn:
-            # Securities table with more fields
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS securities (
-                    symbol TEXT PRIMARY KEY,
-                    name TEXT,
-                    isin TEXT UNIQUE,
-                    sector TEXT,
-                    market_cap REAL,
-                    listing_date TEXT,
-                    is_active BOOLEAN DEFAULT 1,
-                    last_updated TEXT,
-                    last_data_date TEXT,
-                    total_records INTEGER DEFAULT 0
-                )
-            """)
-            
-            # Enhanced price data table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS price_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    symbol TEXT,
-                    date TEXT,
-                    open_price REAL,
-                    high_price REAL,
-                    low_price REAL,
-                    close_price REAL,
-                    volume INTEGER,
-                    turnover REAL,
-                    last_updated TEXT,
-                    UNIQUE(symbol, date)
-                )
-            """)
-            
-            # Create optimized indexes for fast retrieval
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_date ON price_data(symbol, date)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol ON price_data(symbol)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON price_data(date)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_last_data_date ON securities(last_data_date)")
-            
-            # Create table for tracking download progress
-            conn.execute("""
+        # Initialize download tracker table
+        self._init_download_tracker()
+    
+    def _init_download_tracker(self):
+        """Initialize download tracker table in DuckDB."""
+        logger.info("🔧 Initializing download tracker table...")
+        
+        try:
+            # Create download tracker table if it doesn't exist
+            self.db_manager.connection.execute("""
                 CREATE TABLE IF NOT EXISTS download_tracker (
-                    symbol TEXT PRIMARY KEY,
-                    last_download_date TEXT,
-                    download_status TEXT,
-                    records_count INTEGER DEFAULT 0,
-                    error_message TEXT,
-                    retry_count INTEGER DEFAULT 0
+                    symbol VARCHAR PRIMARY KEY,
+                    last_download_date DATE,
+                    download_status VARCHAR,
+                    records_count BIGINT DEFAULT 0,
+                    error_message VARCHAR,
+                    retry_count BIGINT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
                 )
             """)
             
-            conn.commit()
-            logger.info("✅ Enhanced database initialized with optimized indexes")
+            logger.info("✅ Download tracker table initialized")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize download tracker: {e}")
+            raise
     
     async def get_all_indian_stocks(self) -> List[Dict]:
         """Get all available Indian stocks using multiple sources."""
@@ -170,25 +151,11 @@ class EnhancedIndianDataManager:
     
     async def _store_securities(self, securities: List[Dict]):
         """Store securities in database."""
-        with sqlite3.connect(self.db_path) as conn:
-            for security in securities:
-                conn.execute("""
-                    INSERT OR REPLACE INTO securities 
-                    (symbol, name, isin, sector, market_cap, listing_date, is_active, last_updated, last_data_date, total_records)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    security['symbol'],
-                    security['name'],
-                    security['isin'],
-                    security['sector'],
-                    security['market_cap'],
-                    security['listing_date'],
-                    security['is_active'],
-                    datetime.now().isoformat(),
-                    security['last_data_date'],
-                    security['total_records']
-                ))
-            conn.commit()
+        # Note: Securities table was removed from comprehensive database
+        # The price_data table is now the source of truth for symbol data
+        logger.info(f"ℹ️ Securities table removed - using price_data as source of truth")
+        logger.info(f"ℹ️ Skipping storage of {len(securities)} securities metadata")
+        return
     
     async def download_10_years_data(self, symbols: List[str] = None) -> Dict:
         """Download 10 years of historical data for all symbols."""
@@ -348,12 +315,11 @@ class EnhancedIndianDataManager:
     def _get_last_data_date(self, symbol: str) -> Optional[str]:
         """Get the last data date for a symbol."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                result = conn.execute(
-                    "SELECT MAX(date) FROM price_data WHERE symbol = ?",
-                    (symbol,)
-                ).fetchone()
-                return result[0] if result and result[0] else None
+            result = self.db_manager.connection.execute(
+                "SELECT MAX(date) FROM price_data WHERE symbol = ?",
+                (symbol,)
+            ).fetchone()
+            return result[0] if result and result[0] else None
         except Exception:
             return None
     
@@ -361,11 +327,11 @@ class EnhancedIndianDataManager:
         """Store price data with duplicate handling and tracking."""
         records_added = 0
         
-        with sqlite3.connect(self.db_path) as conn:
+        try:
             for data_point in data_points:
                 try:
                     # Use INSERT OR REPLACE to handle duplicates
-                    conn.execute("""
+                    self.db_manager.connection.execute("""
                         INSERT OR REPLACE INTO price_data 
                         (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -385,19 +351,11 @@ class EnhancedIndianDataManager:
                     logger.debug(f"⚠️ Error storing data point for {symbol}: {e}")
                     continue
             
-            # Update securities table with last data date
-            if data_points:
-                last_date = max(dp['date'] for dp in data_points)
-                conn.execute("""
-                    UPDATE securities 
-                    SET last_data_date = ?, total_records = (
-                        SELECT COUNT(*) FROM price_data WHERE symbol = ?
-                    ), last_updated = ?
-                    WHERE symbol = ?
-                """, (last_date, symbol, datetime.now().isoformat(), symbol))
+            # Note: Securities table was removed, so we skip updating it
+            # The price_data table is the source of truth for symbol data
             
             # Update download tracker
-            conn.execute("""
+            self.db_manager.connection.execute("""
                 INSERT OR REPLACE INTO download_tracker 
                 (symbol, last_download_date, download_status, records_count, error_message, retry_count)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -410,7 +368,11 @@ class EnhancedIndianDataManager:
                 0
             ))
             
-            conn.commit()
+            logger.info(f"✅ Stored {records_added} records for {symbol}")
+        
+        except Exception as e:
+            logger.error(f"❌ Error storing price data for {symbol}: {e}")
+            raise
         
         return records_added
     
@@ -453,16 +415,14 @@ class EnhancedIndianDataManager:
     async def _get_symbols_needing_update(self) -> List[str]:
         """Get symbols that need data updates."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                # Get symbols where last data date is more than 1 day old
-                yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-                symbols = conn.execute("""
-                    SELECT symbol FROM securities 
-                    WHERE is_active = 1 
-                    AND (last_data_date IS NULL OR last_data_date < ?)
-                """, (yesterday,)).fetchall()
-                
-                return [row[0] for row in symbols]
+            # Get symbols where last data date is more than 1 day old
+            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            symbols = self.db_manager.connection.execute("""
+                SELECT DISTINCT symbol FROM price_data 
+                WHERE date < ?
+            """, (yesterday,)).fetchall()
+            
+            return [row[0] for row in symbols]
         except Exception as e:
             logger.error(f"❌ Error getting symbols needing update: {e}")
             return []
@@ -549,8 +509,7 @@ class EnhancedIndianDataManager:
             
             query += " ORDER BY date"
             
-            with sqlite3.connect(self.db_path) as conn:
-                df = pd.read_sql_query(query, conn, params=params)
+            df = self.db_manager.connection.execute(query, params).fetchdf()
             
             if not df.empty:
                 df['date'] = pd.to_datetime(df['date'])
@@ -582,21 +541,22 @@ class EnhancedIndianDataManager:
     
     def get_database_stats(self) -> Dict:
         """Get comprehensive database statistics."""
-        with sqlite3.connect(self.db_path) as conn:
-            total_securities = conn.execute(
-                "SELECT COUNT(*) FROM securities WHERE is_active = 1"
+        try:
+            # Get total symbols from price_data (since securities table was removed)
+            total_securities = self.db_manager.connection.execute(
+                "SELECT COUNT(DISTINCT symbol) FROM price_data"
             ).fetchone()[0]
             
-            total_data_points = conn.execute(
+            total_data_points = self.db_manager.connection.execute(
                 "SELECT COUNT(*) FROM price_data"
             ).fetchone()[0]
             
-            date_range = conn.execute(
+            date_range = self.db_manager.connection.execute(
                 "SELECT MIN(date), MAX(date) FROM price_data"
             ).fetchone()
             
             # Download statistics
-            download_stats = conn.execute("""
+            download_stats = self.db_manager.connection.execute("""
                 SELECT 
                     COUNT(*) as total_downloads,
                     SUM(CASE WHEN download_status = 'SUCCESS' THEN 1 ELSE 0 END) as successful,
@@ -608,6 +568,10 @@ class EnhancedIndianDataManager:
             # Database size
             db_size = os.path.getsize(self.db_path) / (1024 * 1024)  # MB
         
+        except Exception as e:
+            logger.error(f"❌ Error getting database stats: {e}")
+            return {}
+
         return {
             'total_securities': total_securities,
             'total_data_points': total_data_points,

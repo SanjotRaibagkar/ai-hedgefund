@@ -159,14 +159,10 @@ results = await simple_eod_screener.screen_universe(
 
 ### **Data Management**
 ```python
-from src.data.indian_data_manager import indian_data_manager
+from src.data.enhanced_indian_data_manager import enhanced_indian_data_manager
 
 # Download historical data
-result = await indian_data_manager.download_historical_data(
-    symbols=['RELIANCE', 'TCS'],
-    start_date='2024-01-01',
-    end_date='2024-12-31'
-)
+result = await enhanced_indian_data_manager.download_10_years_data(['RELIANCE', 'TCS'])
 ```
 
 ## 🎉 **Key Achievements**

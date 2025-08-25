@@ -20,13 +20,13 @@ async def test_simple_eod_system():
     logger.info("=" * 50)
     
     try:
-        from src.data.indian_data_manager import indian_data_manager
+        from src.data.enhanced_indian_data_manager import enhanced_indian_data_manager
         
         # Test 1: Database initialization
         logger.info("\n🔧 Test 1: Database Initialization")
         logger.info("-" * 30)
         
-        stats = indian_data_manager.get_database_stats()
+        stats = enhanced_indian_data_manager.get_database_stats()
         logger.info(f"✅ Database initialized")
         logger.info(f"   Total securities: {stats['total_securities']}")
         logger.info(f"   Total data points: {stats['total_data_points']}")
@@ -37,7 +37,7 @@ async def test_simple_eod_system():
         logger.info("\n📊 Test 2: Fetching Securities")
         logger.info("-" * 30)
         
-        securities = await indian_data_manager.get_all_securities()
+        securities = await enhanced_indian_data_manager.get_all_indian_stocks()
         logger.info(f"✅ Fetched {len(securities)} securities")
         
         if securities:
@@ -55,9 +55,7 @@ async def test_simple_eod_system():
             end_date = datetime.now().strftime('%Y-%m-%d')
             
             logger.info(f"📊 Downloading data for {len(test_symbols)} symbols...")
-            result = await indian_data_manager.download_historical_data(
-                test_symbols, start_date, end_date
-            )
+            result = await enhanced_indian_data_manager.download_10_years_data(test_symbols)
             
             logger.info(f"✅ Download completed")
             logger.info(f"   Total: {result['total']}")
