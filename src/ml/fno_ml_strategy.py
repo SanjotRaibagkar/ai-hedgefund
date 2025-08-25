@@ -43,13 +43,15 @@ class FNOMLStrategy:
         # Initialize components
         self.scaler = StandardScaler()
         
-        # ML models for different horizons
+        # ML models for different horizons (ensemble support)
         self.models = {
-            '1d': None,
-            '5d': None,
-            '21d': None
+            '1d': {},
+            '5d': {},
+            '21d': {}
         }
         self.model_trained = {horizon: False for horizon in self.models.keys()}
+        self.ensemble_models = {}
+        self.model_performances = {}
         
         # Performance tracking
         self.predictions = []
@@ -60,21 +62,25 @@ class FNOMLStrategy:
     def _get_default_strategy_config(self) -> Dict[str, Any]:
         """Get default strategy configuration."""
         return {
-            'min_data_points': 50,
-            'min_oi_threshold': 100,  # Minimum open interest for FNO data
-            'min_volume_threshold': 50,  # Minimum volume for FNO data
-            'confidence_threshold': 0.7,
-            'price_change_threshold': 0.02  # 2% threshold for trading signals
+            'min_data_points': 100,  # Increased for better model training
+            'min_oi_threshold': 500,  # Increased minimum open interest for better liquidity
+            'min_volume_threshold': 1000,  # Increased minimum volume for better liquidity
+            'confidence_threshold': 0.75,  # Increased confidence threshold for better signal quality
+            'price_change_threshold': 0.02,  # 2% threshold for trading signals
+            'ensemble_voting': True,  # Enable ensemble voting from multiple models
+            'min_liquidity_score': 0.6  # Minimum liquidity score threshold
         }
     
     def _get_default_ml_config(self) -> Dict[str, Any]:
         """Get default ML configuration."""
         return {
-            'model_type': 'xgboost',
+            'model_type': 'ensemble',  # Changed to ensemble for multiple models
             'test_size': 0.2,
             'random_state': 42,
             'prediction_horizons': [1, 5, 21],
-            'feature_selection': True
+            'feature_selection': True,
+            'ensemble_models': ['xgboost', 'lightgbm', 'random_forest', 'linear'],
+            'ensemble_weights': [0.4, 0.3, 0.2, 0.1]  # Weighted voting
         }
     
     def _initialize_ml_model(self, model_type: str = 'xgboost'):
@@ -128,11 +134,8 @@ class FNOMLStrategy:
                 logger.warning(f"No FNO data found for {ticker}")
                 return pd.DataFrame()
             
-            # Filter for relevant data
-            fno_data = fno_data[
-                (fno_data['OpnIntrst'] >= self.strategy_config['min_oi_threshold']) |
-                (fno_data['TtlTradgVol'] >= self.strategy_config['min_volume_threshold'])
-            ]
+            # Enhanced filtering with liquidity score
+            fno_data = self._apply_liquidity_filters(fno_data)
             
             if fno_data.empty:
                 logger.warning(f"No relevant FNO data after filtering for {ticker}")
@@ -144,6 +147,119 @@ class FNOMLStrategy:
         except Exception as e:
             logger.error(f"FNO data retrieval failed for {ticker}: {e}")
             return pd.DataFrame()
+    
+    def _apply_liquidity_filters(self, fno_data: pd.DataFrame) -> pd.DataFrame:
+        """Apply enhanced liquidity filters to FNO data."""
+        try:
+            # Calculate liquidity score for each row
+            fno_data = fno_data.copy()
+            
+            # Normalize OI and Volume (0-1 scale)
+            max_oi = fno_data['OpnIntrst'].max()
+            max_volume = fno_data['TtlTradgVol'].max()
+            
+            if max_oi > 0:
+                fno_data['oi_normalized'] = fno_data['OpnIntrst'] / max_oi
+            else:
+                fno_data['oi_normalized'] = 0
+                
+            if max_volume > 0:
+                fno_data['volume_normalized'] = fno_data['TtlTradgVol'] / max_volume
+            else:
+                fno_data['volume_normalized'] = 0
+            
+            # Calculate liquidity score (weighted average of OI and Volume)
+            fno_data['liquidity_score'] = (
+                0.6 * fno_data['oi_normalized'] + 
+                0.4 * fno_data['volume_normalized']
+            )
+            
+            # Apply filters
+            filtered_data = fno_data[
+                (fno_data['OpnIntrst'] >= self.strategy_config['min_oi_threshold']) &
+                (fno_data['TtlTradgVol'] >= self.strategy_config['min_volume_threshold']) &
+                (fno_data['liquidity_score'] >= self.strategy_config['min_liquidity_score'])
+            ]
+            
+            logger.info(f"Liquidity filtering: {len(fno_data)} -> {len(filtered_data)} records")
+            return filtered_data
+            
+        except Exception as e:
+            logger.error(f"Liquidity filtering failed: {e}")
+            return fno_data
+    
+    def _initialize_ensemble_models(self, horizon: str):
+        """Initialize ensemble models for a specific horizon."""
+        try:
+            ensemble_models = {}
+            
+            for model_type in self.ml_config['ensemble_models']:
+                ensemble_models[model_type] = self._initialize_ml_model(model_type)
+            
+            self.models[horizon] = ensemble_models
+            logger.info(f"Initialized ensemble models for {horizon}: {list(ensemble_models.keys())}")
+            
+        except Exception as e:
+            logger.error(f"Ensemble model initialization failed for {horizon}: {e}")
+    
+    def _train_ensemble_models(self, horizon: str, X_train: pd.DataFrame, y_train: pd.Series, 
+                              X_test: pd.DataFrame, y_test: pd.Series) -> Dict[str, Any]:
+        """Train ensemble models and return performance metrics."""
+        try:
+            ensemble_models = self.models[horizon]
+            model_performances = {}
+            
+            for model_name, model in ensemble_models.items():
+                # Train model
+                model.fit(X_train, y_train)
+                
+                # Make predictions
+                y_pred_train = model.predict(X_train)
+                y_pred_test = model.predict(X_test)
+                
+                # Calculate performance
+                performance = {
+                    'train_rmse': np.sqrt(mean_squared_error(y_train, y_pred_train)),
+                    'test_rmse': np.sqrt(mean_squared_error(y_test, y_pred_test)),
+                    'train_r2': r2_score(y_train, y_pred_train),
+                    'test_r2': r2_score(y_test, y_pred_test),
+                    'train_mae': mean_absolute_error(y_train, y_pred_train),
+                    'test_mae': mean_absolute_error(y_test, y_pred_test)
+                }
+                
+                model_performances[model_name] = performance
+                logger.info(f"{model_name} for {horizon}: R² = {performance['test_r2']:.4f}")
+            
+            return model_performances
+            
+        except Exception as e:
+            logger.error(f"Ensemble training failed for {horizon}: {e}")
+            return {}
+    
+    def _ensemble_predict(self, horizon: str, X: pd.DataFrame) -> Tuple[float, float]:
+        """Make ensemble prediction with confidence score."""
+        try:
+            ensemble_models = self.models[horizon]
+            predictions = []
+            weights = self.ml_config['ensemble_weights']
+            
+            for i, (model_name, model) in enumerate(ensemble_models.items()):
+                pred = model.predict(X)[0]  # Single prediction
+                predictions.append(pred * weights[i])
+            
+            # Weighted average prediction
+            ensemble_prediction = sum(predictions)
+            
+            # Calculate confidence based on model agreement
+            base_predictions = [model.predict(X)[0] for model in ensemble_models.values()]
+            confidence = 1.0 - np.std(base_predictions) / (np.mean(np.abs(base_predictions)) + 1e-8)
+            confidence = np.clip(confidence, 0.0, 1.0)
+            
+            return ensemble_prediction, confidence
+            
+        except Exception as e:
+            logger.error(f"Ensemble prediction failed for {horizon}: {e}")
+            return 0.0, 0.0
     
     def _create_daily_fno_features(self, fno_data: pd.DataFrame) -> pd.DataFrame:
         """Create daily FNO features by combining futures and options data."""
@@ -232,6 +348,10 @@ class FNOMLStrategy:
             features_df['date'] = pd.to_datetime(features_df['date'])
             features_df.set_index('date', inplace=True)
             
+            # Clean infinite and NaN values
+            features_df = features_df.replace([np.inf, -np.inf], np.nan)
+            features_df = features_df.fillna(0)  # Replace NaN with 0
+            
             # Add rolling features
             rolling_features = [
                 'total_oi', 'total_volume', 'total_turnover', 'futures_oi', 'options_oi',
@@ -254,6 +374,16 @@ class FNOMLStrategy:
                 features_df['price_momentum_5d'] = features_df['avg_closing_price'].pct_change(5)
                 features_df['price_momentum_10d'] = features_df['avg_closing_price'].pct_change(10)
                 features_df['price_momentum_20d'] = features_df['avg_closing_price'].pct_change(20)
+            
+            # Comprehensive data cleaning
+            features_df = features_df.replace([np.inf, -np.inf], np.nan)
+            features_df = features_df.fillna(0)
+            
+            # Clip extreme values to prevent overflow
+            for col in features_df.columns:
+                if features_df[col].dtype in ['float64', 'float32']:
+                    # Clip to reasonable range (-1000 to 1000)
+                    features_df[col] = np.clip(features_df[col], -1000, 1000)
             
             logger.info(f"Created {len(features_df.columns)} daily FNO features")
             return features_df
@@ -357,34 +487,64 @@ class FNOMLStrategy:
                 X_train_scaled = self.scaler.fit_transform(X_train)
                 X_test_scaled = self.scaler.transform(X_test)
                 
-                # Initialize and train model
-                model = self._initialize_ml_model(self.ml_config['model_type'])
-                model.fit(X_train_scaled, y_train)
+                # Initialize and train ensemble models
+                if self.ml_config['model_type'] == 'ensemble':
+                    self._initialize_ensemble_models(horizon_key)
+                    model_performances = self._train_ensemble_models(
+                        horizon_key, X_train_scaled, y_train, X_test_scaled, y_test
+                    )
+                    
+                    # Calculate ensemble performance (average of all models)
+                    avg_performance = {
+                        'train_rmse': np.mean([p['train_rmse'] for p in model_performances.values()]),
+                        'test_rmse': np.mean([p['test_rmse'] for p in model_performances.values()]),
+                        'train_r2': np.mean([p['train_r2'] for p in model_performances.values()]),
+                        'test_r2': np.mean([p['test_r2'] for p in model_performances.values()]),
+                        'train_mae': np.mean([p['train_mae'] for p in model_performances.values()]),
+                        'test_mae': np.mean([p['test_mae'] for p in model_performances.values()]),
+                        'training_samples': len(X_train),
+                        'test_samples': len(X_test)
+                    }
+                    
+                    performance = avg_performance
+                    self.model_performances[horizon_key] = model_performances
+                else:
+                    # Single model training (fallback)
+                    model = self._initialize_ml_model(self.ml_config['model_type'])
+                    model.fit(X_train_scaled, y_train)
+                    
+                    # Make predictions
+                    y_pred_train = model.predict(X_train_scaled)
+                    y_pred_test = model.predict(X_test_scaled)
+                    
+                    # Calculate performance metrics
+                    performance = {
+                        'train_rmse': np.sqrt(mean_squared_error(y_train, y_pred_train)),
+                        'test_rmse': np.sqrt(mean_squared_error(y_test, y_pred_test)),
+                        'train_r2': r2_score(y_train, y_pred_train),
+                        'test_r2': r2_score(y_test, y_pred_test),
+                        'train_mae': mean_absolute_error(y_train, y_pred_train),
+                        'test_mae': mean_absolute_error(y_test, y_pred_test),
+                        'training_samples': len(X_train),
+                        'test_samples': len(X_test)
+                    }
+                    
+                    # Store single model
+                    self.models[horizon_key] = model
                 
-                # Make predictions
-                y_pred_train = model.predict(X_train_scaled)
-                y_pred_test = model.predict(X_test_scaled)
-                
-                # Calculate performance metrics
-                performance = {
-                    'train_rmse': np.sqrt(mean_squared_error(y_train, y_pred_train)),
-                    'test_rmse': np.sqrt(mean_squared_error(y_test, y_pred_test)),
-                    'train_r2': r2_score(y_train, y_pred_train),
-                    'test_r2': r2_score(y_test, y_pred_test),
-                    'train_mae': mean_absolute_error(y_train, y_pred_train),
-                    'test_mae': mean_absolute_error(y_test, y_pred_test),
-                    'training_samples': len(X_train),
-                    'test_samples': len(X_test)
-                }
-                
-                # Store model and performance
-                self.models[horizon_key] = model
                 self.model_trained[horizon_key] = True
                 self.model_performance[horizon_key] = performance
                 
+                # Get feature importance from best model (XGBoost for ensemble)
+                if self.ml_config['model_type'] == 'ensemble':
+                    best_model = self.models[horizon_key]['xgboost']
+                    feature_importance = self._get_feature_importance(best_model, features.columns)
+                else:
+                    feature_importance = self._get_feature_importance(model, features.columns)
+                
                 training_results[horizon_key] = {
                     'model_performance': performance,
-                    'feature_importance': self._get_feature_importance(model, features.columns),
+                    'feature_importance': feature_importance,
                     'model_type': self.ml_config['model_type']
                 }
                 
@@ -480,20 +640,42 @@ class FNOMLStrategy:
                 # Scale features
                 features_scaled = self.scaler.transform(features)
                 
-                # Make predictions
-                horizon_predictions = model.predict(features_scaled)
+                # Make ensemble predictions with confidence
+                if self.ml_config['model_type'] == 'ensemble' and isinstance(model, dict):
+                    horizon_predictions = []
+                    confidence_scores = []
+                    
+                    for i, (date_idx, feature_row) in enumerate(features.iterrows()):
+                        feature_row_scaled = self.scaler.transform(feature_row.values.reshape(1, -1))
+                        pred, confidence = self._ensemble_predict(horizon_key, feature_row_scaled)
+                        horizon_predictions.append(pred)
+                        confidence_scores.append(confidence)
+                    
+                    horizon_predictions = np.array(horizon_predictions)
+                    confidence_scores = np.array(confidence_scores)
+                else:
+                    # Single model prediction (fallback)
+                    horizon_predictions = model.predict(features_scaled)
+                    confidence_scores = self._calculate_prediction_confidence(features_scaled)
                 
-                # Create prediction DataFrame
+                # Create prediction DataFrame with enhanced confidence filtering
                 pred_df = pd.DataFrame({
                     'date': features.index,
                     'predicted_return': horizon_predictions,
-                    'confidence': self._calculate_prediction_confidence(features_scaled)
+                    'confidence': confidence_scores
                 })
                 
+                # Apply confidence threshold filtering
+                high_confidence_mask = pred_df['confidence'] >= self.strategy_config['confidence_threshold']
+                filtered_predictions = pred_df[high_confidence_mask].copy()
+                
                 predictions[horizon_key] = {
-                    'predictions': pred_df,
+                    'predictions': filtered_predictions,
+                    'all_predictions': pred_df,  # Keep all predictions for analysis
                     'latest_prediction': horizon_predictions[-1] if len(horizon_predictions) > 0 else None,
-                    'prediction_confidence': pred_df['confidence'].iloc[-1] if len(pred_df) > 0 else None
+                    'prediction_confidence': confidence_scores[-1] if len(confidence_scores) > 0 else None,
+                    'high_confidence_count': high_confidence_mask.sum(),
+                    'total_predictions': len(pred_df)
                 }
             
             # Store predictions
@@ -560,17 +742,25 @@ class FNOMLStrategy:
                 latest_pred = pred_data['latest_prediction']
                 confidence = pred_data.get('prediction_confidence', 0.5)
                 
-                # Generate signal based on prediction
+                # Generate signal based on prediction with enhanced confidence filtering
                 threshold = self.strategy_config['price_change_threshold']
-                if latest_pred > threshold:
-                    action = 'BUY'
-                    strength = 'STRONG' if confidence > 0.8 else 'MODERATE'
-                elif latest_pred < -threshold:
-                    action = 'SELL'
-                    strength = 'STRONG' if confidence > 0.8 else 'MODERATE'
+                confidence_threshold = self.strategy_config['confidence_threshold']
+                
+                # Only generate signals if confidence meets threshold
+                if confidence >= confidence_threshold:
+                    if latest_pred > threshold:
+                        action = 'BUY'
+                        strength = 'STRONG' if confidence > 0.85 else 'MODERATE'
+                    elif latest_pred < -threshold:
+                        action = 'SELL'
+                        strength = 'STRONG' if confidence > 0.85 else 'MODERATE'
+                    else:
+                        action = 'HOLD'
+                        strength = 'NEUTRAL'
                 else:
+                    # Low confidence - default to HOLD
                     action = 'HOLD'
-                    strength = 'NEUTRAL'
+                    strength = 'LOW_CONFIDENCE'
                 
                 signals[horizon_key] = {
                     'action': action,
