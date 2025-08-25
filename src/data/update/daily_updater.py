@@ -15,6 +15,7 @@ from ..database.duckdb_manager import DatabaseManager
 from ..collectors.async_data_collector import AsyncDataCollector
 from ..database.models import DataCollectionConfig, DataQualityMetrics
 from .data_quality_monitor import DataQualityMonitor
+from ..downloaders.eod_extra_data_downloader import EODExtraDataDownloader
 
 
 class DailyDataUpdater:
@@ -32,6 +33,7 @@ class DailyDataUpdater:
         self.config_path = config_path
         self.collector = AsyncDataCollector(self.db_manager)
         self.quality_monitor = DataQualityMonitor(self.db_manager)
+        self.eod_downloader = EODExtraDataDownloader()
         
         # Load ticker configuration
         self.tickers_config = self._load_ticker_config()
@@ -54,6 +56,10 @@ class DailyDataUpdater:
                         "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"
                     ],
                     "data_types": ["technical", "fundamental"],
+                    "eod_extra_data": {
+                        "enabled": True,
+                        "types": ["fno_bhav_copy", "equity_bhav_copy_delivery", "bhav_copy_indices", "fii_dii_activity"]
+                    },
                     "update_frequency": "daily",
                     "max_workers": 5,
                     "retry_attempts": 3
@@ -68,7 +74,15 @@ class DailyDataUpdater:
                 
         except Exception as e:
             logger.error(f"Failed to load ticker configuration: {e}")
-            return {"indian_stocks": [], "us_stocks": [], "data_types": ["technical"]}
+            return {
+                "indian_stocks": [], 
+                "us_stocks": [], 
+                "data_types": ["technical"],
+                "eod_extra_data": {
+                    "enabled": True,
+                    "types": ["fno_bhav_copy", "equity_bhav_copy_delivery", "bhav_copy_indices", "fii_dii_activity"]
+                }
+            }
     
     async def run_daily_update(self, target_date: str = None) -> Dict[str, Any]:
         """
@@ -96,106 +110,164 @@ class DailyDataUpdater:
                 return {"success": False, "message": "No tickers configured"}
             
             # Run updates for all tickers
-            results = await self._update_all_tickers(all_tickers, target_date)
+            ticker_results = await self._update_all_tickers(all_tickers, target_date)
+            
+            # Run EOD extra data updates
+            eod_results = await self._update_eod_extra_data(target_date)
             
             # Generate quality report
             quality_report = await self._generate_quality_report(target_date)
             
-            # Compile final results
-            update_summary = {
+            # Combine results
+            results = {
                 "success": True,
                 "target_date": target_date,
-                "total_tickers": len(all_tickers),
-                "successful_updates": results["successful"],
-                "failed_updates": results["failed"],
-                "total_records_collected": results["total_records"],
-                "duration_seconds": results["duration"],
+                "ticker_updates": ticker_results,
+                "eod_extra_data": eod_results,
                 "quality_report": quality_report,
-                "last_updated": datetime.now().isoformat()
+                "summary": {
+                    "total_tickers": len(all_tickers),
+                    "successful_tickers": ticker_results.get("successful", 0),
+                    "failed_tickers": ticker_results.get("failed", 0),
+                    "eod_data_types": len(eod_results.get("successful_types", [])),
+                    "failed_eod_types": len(eod_results.get("failed_types", []))
+                }
             }
             
-            logger.info(f"Daily update completed: {results['successful']}/{len(all_tickers)} tickers successful")
-            return update_summary
+            logger.info(f"Daily update completed: {results['summary']['successful_tickers']}/{results['summary']['total_tickers']} tickers successful")
+            logger.info(f"EOD extra data: {results['summary']['eod_data_types']} types successful")
+            
+            return results
             
         except Exception as e:
             logger.error(f"Daily update failed: {e}")
             return {"success": False, "error": str(e)}
     
+    async def _update_eod_extra_data(self, target_date: str) -> Dict[str, Any]:
+        """Update EOD extra data for the target date."""
+        try:
+            if not self.tickers_config.get("eod_extra_data", {}).get("enabled", True):
+                logger.info("EOD extra data updates disabled in configuration")
+                return {"success": True, "message": "EOD extra data updates disabled"}
+            
+            logger.info(f"Starting EOD extra data update for {target_date}")
+            
+            eod_types = self.tickers_config.get("eod_extra_data", {}).get("types", [])
+            successful_types = []
+            failed_types = []
+            
+            # Convert target_date to DD-MM-YYYY format for NSE API
+            target_dt = datetime.strptime(target_date, '%Y-%m-%d')
+            nse_date_format = target_dt.strftime('%d-%m-%Y')
+            
+            for eod_type in eod_types:
+                try:
+                    logger.info(f"Downloading {eod_type} for {nse_date_format}")
+                    
+                    if eod_type == "fno_bhav_copy":
+                        df = self.eod_downloader.nse.fno_bhav_copy(nse_date_format)
+                        if not df.empty:
+                            df['TRADE_DATE'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM fno_bhav_copy WHERE TRADE_DATE = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO fno_bhav_copy SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                    
+                    elif eod_type == "equity_bhav_copy_delivery":
+                        df = self.eod_downloader.nse.bhav_copy_with_delivery(nse_date_format)
+                        if not df.empty:
+                            df['TRADE_DATE'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM equity_bhav_copy_delivery WHERE TRADE_DATE = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO equity_bhav_copy_delivery SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                    
+                    elif eod_type == "bhav_copy_indices":
+                        df = self.eod_downloader.nse.bhav_copy_indices(nse_date_format)
+                        if not df.empty:
+                            df['TRADE_DATE'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM bhav_copy_indices WHERE TRADE_DATE = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO bhav_copy_indices SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                    
+                    elif eod_type == "fii_dii_activity":
+                        df = self.eod_downloader.nse.fii_dii_activity()
+                        if not df.empty:
+                            df['activity_date'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM fii_dii_activity WHERE activity_date = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO fii_dii_activity SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                    
+                except Exception as e:
+                    failed_types.append(eod_type)
+                    logger.error(f"❌ Failed to download {eod_type}: {e}")
+            
+            return {
+                "success": True,
+                "successful_types": successful_types,
+                "failed_types": failed_types,
+                "total_types": len(eod_types)
+            }
+            
+        except Exception as e:
+            logger.error(f"EOD extra data update failed: {e}")
+            return {"success": False, "error": str(e)}
+    
     async def _update_all_tickers(self, tickers: List[str], target_date: str) -> Dict[str, Any]:
-        """Update data for all tickers."""
-        start_time = datetime.now()
-        successful = 0
-        failed = 0
-        total_records = 0
-        
-        # Process tickers in batches to avoid overwhelming the system
-        batch_size = self.tickers_config.get("max_workers", 5)
-        
-        for i in range(0, len(tickers), batch_size):
-            batch = tickers[i:i + batch_size]
-            logger.info(f"Processing batch {i//batch_size + 1}: {batch}")
+        """Update all tickers for the target date."""
+        try:
+            results = []
+            successful = 0
+            failed = 0
             
-            # Process batch concurrently
-            tasks = [self._update_single_ticker(ticker, target_date) for ticker in batch]
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Process results
-            for ticker, result in zip(batch, batch_results):
-                if isinstance(result, Exception):
-                    logger.error(f"Failed to update {ticker}: {result}")
-                    failed += 1
-                elif result["success"]:
+            for ticker in tickers:
+                result = await self._update_single_ticker(ticker, target_date)
+                results.append(result)
+                
+                if result.get("success", False):
                     successful += 1
-                    total_records += result.get("records_collected", 0)
-                    logger.info(f"✅ Updated {ticker}: {result.get('records_collected', 0)} records")
                 else:
                     failed += 1
-                    logger.warning(f"❌ Failed to update {ticker}: {result.get('error', 'Unknown error')}")
             
-            # Small delay between batches
-            await asyncio.sleep(1)
-        
-        duration = (datetime.now() - start_time).total_seconds()
-        
-        return {
-            "successful": successful,
-            "failed": failed,
-            "total_records": total_records,
-            "duration": duration
-        }
+            return {
+                "success": True,
+                "successful": successful,
+                "failed": failed,
+                "total": len(tickers),
+                "results": results
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to update all tickers: {e}")
+            return {"success": False, "error": str(e)}
     
     async def _update_single_ticker(self, ticker: str, target_date: str) -> Dict[str, Any]:
-        """Update data for a single ticker."""
+        """Update a single ticker for the target date."""
         try:
-            # Check what data needs updating
-            update_info = await self._check_update_requirements(ticker, target_date)
+            # Check update requirements
+            requirements = await self._check_update_requirements(ticker, target_date)
             
-            if not update_info["needs_update"]:
-                return {
-                    "success": True,
-                    "ticker": ticker,
-                    "records_collected": 0,
-                    "message": "No update needed"
-                }
-            
-            # Collect missing data
-            config = DataCollectionConfig(
-                ticker=ticker,
-                start_date=datetime.strptime(update_info["start_date"], '%Y-%m-%d').date(),
-                end_date=datetime.strptime(target_date, '%Y-%m-%d').date(),
-                data_types=self.tickers_config.get("data_types", ["technical"]),
-                max_workers=3,
-                retry_attempts=self.tickers_config.get("retry_attempts", 3)
-            )
+            if not requirements['needs_update']:
+                return {"success": True, "ticker": ticker, "skipped": True}
             
             # Collect data
-            results = await self.collector.collect_historical_data(config)
+            config = DataCollectionConfig(
+                ticker=ticker,
+                start_date=requirements['start_date'],
+                end_date=target_date,
+                data_types=self.tickers_config.get("data_types", ["technical"])
+            )
             
-            # Store data in database
+            results = await self.collector.collect_data(config)
+            
+            # Store collected data
             total_records = await self._store_collected_data(ticker, results)
-            
-            # Update quality metrics
-            await self.quality_monitor.update_quality_metrics(ticker, target_date)
             
             return {
                 "success": True,
@@ -298,17 +370,14 @@ class DailyDataUpdater:
                 
                 # Get missing data count
                 missing_dates = self.db_manager.get_missing_data_dates(
-                    ticker, 
-                    (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=30)).strftime('%Y-%m-%d'),
-                    target_date
+                    ticker, "technical", target_date, target_date
                 )
                 missing_data_counts.append(len(missing_dates))
             
             return {
                 "average_quality_score": sum(quality_scores) / len(quality_scores) if quality_scores else 0,
-                "total_missing_days": sum(missing_data_counts),
-                "tickers_with_issues": len([x for x in quality_scores if x < 90]) if quality_scores else 0,
-                "generated_at": datetime.now().isoformat()
+                "total_missing_data_points": sum(missing_data_counts),
+                "tickers_with_missing_data": sum(1 for count in missing_data_counts if count > 0)
             }
             
         except Exception as e:
@@ -364,39 +433,19 @@ class DailyDataUpdater:
             }
     
     def get_update_status(self) -> Dict[str, Any]:
-        """Get current update status for all tickers."""
+        """Get current update status and statistics."""
         try:
             all_tickers = (self.tickers_config.get("indian_stocks", []) + 
                           self.tickers_config.get("us_stocks", []))
             
             status = {
                 "total_tickers": len(all_tickers),
-                "ticker_status": {},
-                "last_check": datetime.now().isoformat()
+                "indian_stocks": len(self.tickers_config.get("indian_stocks", [])),
+                "us_stocks": len(self.tickers_config.get("us_stocks", [])),
+                "data_types": self.tickers_config.get("data_types", []),
+                "eod_extra_data_enabled": self.tickers_config.get("eod_extra_data", {}).get("enabled", False),
+                "eod_extra_data_types": self.tickers_config.get("eod_extra_data", {}).get("types", [])
             }
-            
-            for ticker in all_tickers:
-                latest_technical = self.db_manager.get_latest_data_date(ticker, "technical")
-                latest_fundamental = self.db_manager.get_latest_data_date(ticker, "fundamental")
-                
-                # Calculate days behind
-                today = datetime.now().date()
-                tech_days_behind = 0
-                fund_days_behind = 0
-                
-                if latest_technical:
-                    tech_days_behind = (today - datetime.strptime(latest_technical, '%Y-%m-%d').date()).days
-                
-                if latest_fundamental:
-                    fund_days_behind = (today - datetime.strptime(latest_fundamental, '%Y-%m-%d').date()).days
-                
-                status["ticker_status"][ticker] = {
-                    "latest_technical": latest_technical,
-                    "latest_fundamental": latest_fundamental,
-                    "technical_days_behind": tech_days_behind,
-                    "fundamental_days_behind": fund_days_behind,
-                    "needs_update": tech_days_behind > 1 or fund_days_behind > 90
-                }
             
             return status
             
