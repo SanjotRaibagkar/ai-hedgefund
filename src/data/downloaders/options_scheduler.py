@@ -15,13 +15,13 @@ from datetime import datetime
 from loguru import logger
 import psutil
 
-from .options_chain_collector import OptionsChainCollector
+from options_chain_collector import OptionsChainCollector
 
 
 class OptionsScheduler:
     """Service scheduler for options data collection."""
     
-    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
+    def __init__(self, db_path: str = "data/options_chain_data.duckdb"):
         """
         Initialize the options scheduler.
         
@@ -149,7 +149,7 @@ def main():
     parser = argparse.ArgumentParser(description='Options Data Collection Scheduler')
     parser.add_argument('action', choices=['start', 'stop', 'restart', 'status'], 
                        help='Action to perform')
-    parser.add_argument('--db-path', default='data/comprehensive_equity.duckdb',
+    parser.add_argument('--db-path', default='data/options_chain_data.duckdb',
                        help='Path to DuckDB database')
     parser.add_argument('--daemon', action='store_true',
                        help='Run as daemon process')

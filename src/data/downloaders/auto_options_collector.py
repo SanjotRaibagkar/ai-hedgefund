@@ -24,7 +24,7 @@ from .options_chain_collector import OptionsChainCollector
 class AutoOptionsCollector:
     """Enhanced options collector with automatic startup and monitoring."""
     
-    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
+    def __init__(self, db_path: str = "data/options_chain_data.duckdb"):
         """Initialize the auto options collector."""
         self.db_path = db_path
         self.collector = OptionsChainCollector(db_path)

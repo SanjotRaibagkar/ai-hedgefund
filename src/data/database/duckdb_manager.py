@@ -43,8 +43,12 @@ class DatabaseManager:
         """Initialize database connection and create tables."""
         try:
             self.connection = duckdb.connect(self.db_path)
+            
+            # DuckDB has built-in concurrency support
+            # No need for SQLite PRAGMA commands
+            
             self._create_tables()
-            logger.info(f"DuckDB database initialized successfully at {self.db_path}")
+            logger.info(f"DuckDB database initialized successfully at {self.db_path} with built-in concurrency support")
         except Exception as e:
             logger.error(f"Failed to initialize DuckDB database: {e}")
             raise
@@ -178,32 +182,8 @@ class DatabaseManager:
             )
         """)
         
-        # Options Chain Data Table
-        self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS options_chain_data (
-                timestamp TIMESTAMP,
-                index_symbol VARCHAR,
-                strike_price DOUBLE,
-                expiry_date DATE,
-                option_type VARCHAR,
-                last_price DOUBLE,
-                bid_price DOUBLE,
-                ask_price DOUBLE,
-                volume BIGINT,
-                open_interest BIGINT,
-                change_in_oi BIGINT,
-                implied_volatility DOUBLE,
-                delta DOUBLE,
-                gamma DOUBLE,
-                theta DOUBLE,
-                vega DOUBLE,
-                spot_price DOUBLE,
-                atm_strike DOUBLE,
-                pcr DOUBLE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (timestamp, index_symbol, strike_price, expiry_date, option_type)
-            )
-        """)
+        # Options Chain Data Table - Now managed by OptionsDatabaseManager
+        # Moved to separate database: data/options_chain_data.duckdb
         
         logger.info("✅ All tables created with consistent schema")
         
