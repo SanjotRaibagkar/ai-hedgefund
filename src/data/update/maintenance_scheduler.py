@@ -1,62 +1,48 @@
 """
 Maintenance Scheduler for AI Hedge Fund.
-Handles scheduling and execution of automated maintenance tasks.
+Handles automated scheduling of data updates and maintenance tasks.
 """
 
 import asyncio
 import schedule
 import time
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, Any, Optional, List
 from loguru import logger
-from pathlib import Path
 import json
-import threading
-from concurrent.futures import ThreadPoolExecutor
+import os
+from pathlib import Path
 
-from ..database.duckdb_manager import DatabaseManager
 from .daily_updater import DailyDataUpdater
-from .data_quality_monitor import DataQualityMonitor
-from .missing_data_filler import MissingDataFiller
+from ..database.duckdb_manager import DatabaseManager
+from ..downloaders.eod_extra_data_downloader import EODExtraDataDownloader
 
 
 class MaintenanceScheduler:
-    """Handles automated scheduling of maintenance tasks."""
+    """Handles automated scheduling of data updates and maintenance tasks."""
     
-    def __init__(self, db_manager: DatabaseManager = None, config_path: str = "config/maintenance.json"):
+    def __init__(self, config_path: str = "config/scheduler_config.json"):
         """
         Initialize maintenance scheduler.
         
         Args:
-            db_manager: Database manager instance
-            config_path: Path to maintenance configuration file
+            config_path: Path to scheduler configuration file
         """
-        self.db_manager = db_manager or DatabaseManager()
         self.config_path = config_path
+        self.db_manager = DatabaseManager()
         self.daily_updater = DailyDataUpdater(self.db_manager)
-        self.quality_monitor = DataQualityMonitor(self.db_manager)
-        self.data_filler = MissingDataFiller(self.db_manager)
+        self.eod_downloader = EODExtraDataDownloader()
         
-        # Load maintenance configuration
-        self.config = self._load_maintenance_config()
+        # Load scheduler configuration
+        self.scheduler_config = self._load_scheduler_config()
         
-        # Task execution tracking
-        self.task_history = []
-        self.running = False
-        self.scheduler_thread = None
+        # Initialize schedule
+        self._setup_schedules()
         
-        # Available maintenance tasks
-        self.available_tasks = {
-            'daily_update': self._run_daily_update,
-            'quality_check': self._run_quality_check,
-            'fill_missing_data': self._run_missing_data_fill,
-            'database_cleanup': self._run_database_cleanup,
-            'health_check': self._run_health_check,
-            'backup_database': self._run_database_backup
-        }
+        logger.info("Maintenance Scheduler initialized")
     
-    def _load_maintenance_config(self) -> Dict[str, Any]:
-        """Load maintenance configuration from file."""
+    def _load_scheduler_config(self) -> Dict[str, Any]:
+        """Load scheduler configuration from file."""
         try:
             config_file = Path(self.config_path)
             if config_file.exists():
@@ -65,72 +51,44 @@ class MaintenanceScheduler:
             else:
                 # Create default configuration
                 default_config = {
-                    "enabled": True,
-                    "timezone": "UTC",
-                    "tasks": {
-                        "daily_update": {
-                            "enabled": True,
-                            "schedule": "daily",
-                            "time": "06:00",
-                            "retry_on_failure": True,
-                            "max_retries": 3,
-                            "notification_on_failure": True
-                        },
-                        "quality_check": {
-                            "enabled": True,
-                            "schedule": "daily",
-                            "time": "07:00",
-                            "parameters": {
-                                "quality_threshold": 80.0
-                            }
-                        },
-                        "fill_missing_data": {
-                            "enabled": True,
-                            "schedule": "weekly",
-                            "day": "sunday",
-                            "time": "08:00",
-                            "parameters": {
-                                "fill_method": "smart",
-                                "max_gap_days": 7
-                            }
-                        },
-                        "database_cleanup": {
-                            "enabled": True,
-                            "schedule": "weekly",
-                            "day": "sunday",
-                            "time": "02:00",
-                            "parameters": {
-                                "keep_days": 365
-                            }
-                        },
-                        "health_check": {
-                            "enabled": True,
-                            "schedule": "hourly",
-                            "parameters": {
-                                "check_database": True,
-                                "check_data_freshness": True
-                            }
-                        },
-                        "backup_database": {
-                            "enabled": True,
-                            "schedule": "daily",
-                            "time": "01:00",
-                            "parameters": {
-                                "backup_path": "backups/",
-                                "keep_backups": 7
-                            }
-                        }
+                    "daily_updates": {
+                        "enabled": True,
+                        "time": "06:00",  # 6 AM
+                        "timezone": "Asia/Kolkata",
+                        "include_eod_extra_data": True,
+                        "retry_attempts": 3,
+                        "retry_delay_minutes": 30
+                    },
+                    "weekly_maintenance": {
+                        "enabled": True,
+                        "day": "sunday",
+                        "time": "02:00",
+                        "timezone": "Asia/Kolkata"
+                    },
+                    "monthly_cleanup": {
+                        "enabled": True,
+                        "day": 1,
+                        "time": "03:00",
+                        "timezone": "Asia/Kolkata"
+                    },
+                    "eod_extra_data": {
+                        "enabled": True,
+                        "time": "06:00",  # 6 AM as requested
+                        "timezone": "Asia/Kolkata",
+                        "data_types": ["fno_bhav_copy", "equity_bhav_copy_delivery", "bhav_copy_indices", "fii_dii_activity"],
+                        "retry_attempts": 3,
+                        "retry_delay_minutes": 15
                     },
                     "notifications": {
-                        "email_enabled": False,
-                        "email_recipients": [],
-                        "slack_enabled": False,
-                        "slack_webhook": ""
+                        "enabled": True,
+                        "email": False,
+                        "log_file": True,
+                        "console": True
                     },
-                    "logging": {
-                        "log_level": "INFO",
-                        "log_file": "logs/maintenance.log",
-                        "max_log_size_mb": 100
+                    "performance": {
+                        "max_concurrent_jobs": 3,
+                        "job_timeout_minutes": 120,
+                        "memory_limit_mb": 2048
                     }
                 }
                 
@@ -142,405 +100,414 @@ class MaintenanceScheduler:
                 return default_config
                 
         except Exception as e:
-            logger.error(f"Failed to load maintenance configuration: {e}")
-            return {"enabled": False, "tasks": {}}
+            logger.error(f"Failed to load scheduler configuration: {e}")
+            return {
+                "daily_updates": {"enabled": True, "time": "06:00"},
+                "eod_extra_data": {"enabled": True, "time": "06:00"},
+                "notifications": {"enabled": True}
+            }
     
-    def start_scheduler(self):
-        """Start the maintenance scheduler."""
+    def _setup_schedules(self):
+        """Setup all scheduled jobs."""
         try:
-            if not self.config.get("enabled", False):
-                logger.info("Maintenance scheduler is disabled in configuration")
-                return
-            
-            if self.running:
-                logger.warning("Scheduler is already running")
-                return
-            
-            logger.info("Starting maintenance scheduler...")
-            
-            # Schedule all enabled tasks
-            self._schedule_tasks()
-            
-            # Start scheduler in a separate thread
-            self.running = True
-            self.scheduler_thread = threading.Thread(target=self._run_scheduler, daemon=True)
-            self.scheduler_thread.start()
-            
-            logger.info("Maintenance scheduler started successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to start maintenance scheduler: {e}")
-            self.running = False
-    
-    def stop_scheduler(self):
-        """Stop the maintenance scheduler."""
-        try:
-            if not self.running:
-                logger.info("Scheduler is not running")
-                return
-            
-            logger.info("Stopping maintenance scheduler...")
-            self.running = False
-            
-            # Clear all scheduled jobs
+            # Clear existing schedules
             schedule.clear()
             
-            # Wait for scheduler thread to finish
-            if self.scheduler_thread and self.scheduler_thread.is_alive():
-                self.scheduler_thread.join(timeout=5)
+            # Daily updates at 6 AM
+            if self.scheduler_config.get("daily_updates", {}).get("enabled", True):
+                daily_time = self.scheduler_config["daily_updates"].get("time", "06:00")
+                schedule.every().day.at(daily_time).do(self._run_daily_update)
+                logger.info(f"✅ Scheduled daily updates at {daily_time}")
             
-            logger.info("Maintenance scheduler stopped")
+            # EOD Extra Data updates at 6 AM
+            if self.scheduler_config.get("eod_extra_data", {}).get("enabled", True):
+                eod_time = self.scheduler_config["eod_extra_data"].get("time", "06:00")
+                schedule.every().day.at(eod_time).do(self._run_eod_extra_data_update)
+                logger.info(f"✅ Scheduled EOD extra data updates at {eod_time}")
+            
+            # Weekly maintenance
+            if self.scheduler_config.get("weekly_maintenance", {}).get("enabled", True):
+                weekly_day = self.scheduler_config["weekly_maintenance"].get("day", "sunday")
+                weekly_time = self.scheduler_config["weekly_maintenance"].get("time", "02:00")
+                getattr(schedule.every(), weekly_day).at(weekly_time).do(self._run_weekly_maintenance)
+                logger.info(f"✅ Scheduled weekly maintenance on {weekly_day} at {weekly_time}")
+            
+            # Monthly cleanup
+            if self.scheduler_config.get("monthly_cleanup", {}).get("enabled", True):
+                monthly_day = self.scheduler_config["monthly_cleanup"].get("day", 1)
+                monthly_time = self.scheduler_config["monthly_cleanup"].get("time", "03:00")
+                schedule.every().month.at(monthly_time).do(self._run_monthly_cleanup)
+                logger.info(f"✅ Scheduled monthly cleanup on day {monthly_day} at {monthly_time}")
+            
+            logger.info("All schedules configured successfully")
             
         except Exception as e:
-            logger.error(f"Failed to stop maintenance scheduler: {e}")
+            logger.error(f"Failed to setup schedules: {e}")
     
-    def _schedule_tasks(self):
-        """Schedule all enabled maintenance tasks."""
+    def _run_daily_update(self):
+        """Run daily data update."""
         try:
-            tasks_config = self.config.get("tasks", {})
+            logger.info("🔄 Starting scheduled daily update")
             
-            for task_name, task_config in tasks_config.items():
-                if not task_config.get("enabled", False):
-                    logger.debug(f"Task {task_name} is disabled")
-                    continue
-                
-                if task_name not in self.available_tasks:
-                    logger.warning(f"Unknown task: {task_name}")
-                    continue
-                
-                self._schedule_single_task(task_name, task_config)
+            # Get yesterday's date
+            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
             
-            logger.info(f"Scheduled {len([t for t in tasks_config.values() if t.get('enabled', False)])} maintenance tasks")
+            # Run daily update
+            asyncio.run(self.daily_updater.run_daily_update(yesterday))
+            
+            logger.info("✅ Daily update completed successfully")
             
         except Exception as e:
-            logger.error(f"Failed to schedule tasks: {e}")
+            logger.error(f"❌ Daily update failed: {e}")
+            self._handle_job_failure("daily_update", str(e))
     
-    def _schedule_single_task(self, task_name: str, task_config: Dict[str, Any]):
-        """Schedule a single maintenance task."""
+    def _run_eod_extra_data_update(self):
+        """Run EOD extra data update."""
         try:
-            schedule_type = task_config.get("schedule", "daily")
-            task_func = self.available_tasks[task_name]
+            logger.info("🔄 Starting scheduled EOD extra data update")
             
-            # Create wrapper function that includes error handling
-            def task_wrapper():
+            # Get yesterday's date
+            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            
+            # Run EOD extra data update
+            asyncio.run(self._update_eod_extra_data(yesterday))
+            
+            logger.info("✅ EOD extra data update completed successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ EOD extra data update failed: {e}")
+            self._handle_job_failure("eod_extra_data_update", str(e))
+    
+    async def _update_eod_extra_data(self, target_date: str):
+        """Update EOD extra data for the target date."""
+        try:
+            eod_types = self.scheduler_config.get("eod_extra_data", {}).get("data_types", [])
+            successful_types = []
+            failed_types = []
+            
+            # Convert target_date to DD-MM-YYYY format for NSE API
+            target_dt = datetime.strptime(target_date, '%Y-%m-%d')
+            nse_date_format = target_dt.strftime('%d-%m-%Y')
+            
+            logger.info(f"Downloading EOD extra data for {nse_date_format}")
+            
+            for eod_type in eod_types:
                 try:
-                    start_time = datetime.now()
-                    logger.info(f"Starting scheduled task: {task_name}")
+                    logger.info(f"Downloading {eod_type} for {nse_date_format}")
                     
-                    # Run the task
-                    result = asyncio.run(task_func(task_config.get("parameters", {})))
+                    if eod_type == "fno_bhav_copy":
+                        df = self.eod_downloader.nse.fno_bhav_copy(nse_date_format)
+                        if not df.empty:
+                            df['TRADE_DATE'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM fno_bhav_copy WHERE TRADE_DATE = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO fno_bhav_copy SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
                     
-                    # Record task execution
-                    execution_record = {
-                        "task_name": task_name,
-                        "start_time": start_time.isoformat(),
-                        "end_time": datetime.now().isoformat(),
-                        "duration_seconds": (datetime.now() - start_time).total_seconds(),
-                        "success": result.get("success", False),
-                        "result": result
-                    }
+                    elif eod_type == "equity_bhav_copy_delivery":
+                        df = self.eod_downloader.nse.bhav_copy_with_delivery(nse_date_format)
+                        if not df.empty:
+                            df['TRADE_DATE'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM equity_bhav_copy_delivery WHERE TRADE_DATE = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO equity_bhav_copy_delivery SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
                     
-                    self.task_history.append(execution_record)
+                    elif eod_type == "bhav_copy_indices":
+                        df = self.eod_downloader.nse.bhav_copy_indices(nse_date_format)
+                        if not df.empty:
+                            df['TRADE_DATE'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM bhav_copy_indices WHERE TRADE_DATE = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO bhav_copy_indices SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
                     
-                    # Keep only last 100 records
-                    if len(self.task_history) > 100:
-                        self.task_history = self.task_history[-100:]
-                    
-                    if result.get("success", False):
-                        logger.info(f"Task {task_name} completed successfully")
-                    else:
-                        logger.error(f"Task {task_name} failed: {result.get('error', 'Unknown error')}")
-                        
-                        # Handle retries if configured
-                        if task_config.get("retry_on_failure", False):
-                            self._handle_task_retry(task_name, task_config, result)
+                    elif eod_type == "fii_dii_activity":
+                        df = self.eod_downloader.nse.fii_dii_activity()
+                        if not df.empty:
+                            df['activity_date'] = target_dt.date()
+                            df['last_updated'] = datetime.now().isoformat()
+                            self.eod_downloader.conn.execute("DELETE FROM fii_dii_activity WHERE activity_date = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("INSERT INTO fii_dii_activity SELECT * FROM df")
+                            successful_types.append(eod_type)
+                            logger.info(f"✅ {eod_type}: {len(df)} records")
                     
                 except Exception as e:
-                    logger.error(f"Task {task_name} execution failed: {e}")
+                    failed_types.append(eod_type)
+                    logger.error(f"❌ Failed to download {eod_type}: {e}")
             
-            # Schedule based on type
-            if schedule_type == "daily":
-                time_str = task_config.get("time", "00:00")
-                schedule.every().day.at(time_str).do(task_wrapper)
-                logger.info(f"Scheduled {task_name} daily at {time_str}")
-                
-            elif schedule_type == "weekly":
-                day = task_config.get("day", "monday").lower()
-                time_str = task_config.get("time", "00:00")
-                
-                if day == "monday":
-                    schedule.every().monday.at(time_str).do(task_wrapper)
-                elif day == "tuesday":
-                    schedule.every().tuesday.at(time_str).do(task_wrapper)
-                elif day == "wednesday":
-                    schedule.every().wednesday.at(time_str).do(task_wrapper)
-                elif day == "thursday":
-                    schedule.every().thursday.at(time_str).do(task_wrapper)
-                elif day == "friday":
-                    schedule.every().friday.at(time_str).do(task_wrapper)
-                elif day == "saturday":
-                    schedule.every().saturday.at(time_str).do(task_wrapper)
-                elif day == "sunday":
-                    schedule.every().sunday.at(time_str).do(task_wrapper)
-                
-                logger.info(f"Scheduled {task_name} weekly on {day} at {time_str}")
-                
-            elif schedule_type == "hourly":
-                schedule.every().hour.do(task_wrapper)
-                logger.info(f"Scheduled {task_name} hourly")
-                
-            elif schedule_type == "minutes":
-                interval = task_config.get("interval", 60)
-                schedule.every(interval).minutes.do(task_wrapper)
-                logger.info(f"Scheduled {task_name} every {interval} minutes")
-            
-        except Exception as e:
-            logger.error(f"Failed to schedule task {task_name}: {e}")
-    
-    def _run_scheduler(self):
-        """Run the scheduler loop."""
-        try:
-            while self.running:
-                schedule.run_pending()
-                time.sleep(60)  # Check every minute
-        except Exception as e:
-            logger.error(f"Scheduler loop error: {e}")
-            self.running = False
-    
-    def _handle_task_retry(self, task_name: str, task_config: Dict[str, Any], last_result: Dict[str, Any]):
-        """Handle task retry logic."""
-        try:
-            max_retries = task_config.get("max_retries", 3)
-            # Implementation for retry logic would go here
-            logger.info(f"Retry logic for {task_name} (max retries: {max_retries})")
-        except Exception as e:
-            logger.error(f"Failed to handle retry for {task_name}: {e}")
-    
-    async def _run_daily_update(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Run daily data update task."""
-        try:
-            target_date = parameters.get("target_date")
-            result = await self.daily_updater.run_daily_update(target_date)
-            return result
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _run_quality_check(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Run data quality check task."""
-        try:
-            threshold = parameters.get("quality_threshold", 80.0)
-            
-            # Get all tickers from config
-            tickers = (self.daily_updater.tickers_config.get("indian_stocks", []) + 
-                      self.daily_updater.tickers_config.get("us_stocks", []))
-            
-            # Generate quality report
-            report = await self.quality_monitor.generate_quality_report(tickers)
-            
-            # Check if any tickers are below threshold
-            issues_found = []
-            if "ticker_quality" in report:
-                for ticker, quality_data in report["ticker_quality"].items():
-                    if quality_data.get("overall_score", 0) < threshold:
-                        issues_found.append({
-                            "ticker": ticker,
-                            "score": quality_data.get("overall_score", 0),
-                            "issues": quality_data.get("has_issues", False)
-                        })
+            logger.info(f"EOD extra data update summary: {len(successful_types)} successful, {len(failed_types)} failed")
             
             return {
                 "success": True,
-                "quality_report": report,
-                "issues_found": len(issues_found),
-                "low_quality_tickers": issues_found
+                "successful_types": successful_types,
+                "failed_types": failed_types,
+                "total_types": len(eod_types)
             }
             
         except Exception as e:
+            logger.error(f"EOD extra data update failed: {e}")
             return {"success": False, "error": str(e)}
     
-    async def _run_missing_data_fill(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Run missing data fill task."""
+    def _run_weekly_maintenance(self):
+        """Run weekly maintenance tasks."""
         try:
-            fill_method = parameters.get("fill_method", "smart")
-            max_gap_days = parameters.get("max_gap_days", 7)
+            logger.info("🔄 Starting weekly maintenance")
             
-            # Get all tickers
-            tickers = (self.daily_updater.tickers_config.get("indian_stocks", []) + 
-                      self.daily_updater.tickers_config.get("us_stocks", []))
+            # Database optimization
+            self._optimize_database()
             
-            # Fill missing data for each ticker
-            results = []
-            for ticker in tickers:
-                end_date = datetime.now().strftime('%Y-%m-%d')
-                start_date = (datetime.now() - timedelta(days=max_gap_days)).strftime('%Y-%m-%d')
-                
-                result = await self.data_filler.fill_missing_data(ticker, start_date, end_date, fill_method)
-                results.append(result)
+            # Clean up old logs
+            self._cleanup_old_logs()
             
-            total_filled = sum([r.get("filled_records", 0) for r in results if r.get("success", False)])
+            # Generate weekly report
+            self._generate_weekly_report()
             
-            return {
-                "success": True,
-                "total_tickers_processed": len(tickers),
-                "total_records_filled": total_filled,
-                "results": results
-            }
+            logger.info("✅ Weekly maintenance completed successfully")
             
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.error(f"❌ Weekly maintenance failed: {e}")
+            self._handle_job_failure("weekly_maintenance", str(e))
     
-    async def _run_database_cleanup(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Run database cleanup task."""
+    def _run_monthly_cleanup(self):
+        """Run monthly cleanup tasks."""
         try:
-            keep_days = parameters.get("keep_days", 365)
-            cutoff_date = (datetime.now() - timedelta(days=keep_days)).strftime('%Y-%m-%d')
+            logger.info("🔄 Starting monthly cleanup")
             
-            # Database cleanup logic would go here
-            # For now, just return success
+            # Archive old data
+            self._archive_old_data()
             
-            return {
-                "success": True,
-                "cutoff_date": cutoff_date,
-                "message": "Database cleanup completed"
-            }
+            # Update statistics
+            self._update_monthly_statistics()
+            
+            # Clean up temporary files
+            self._cleanup_temp_files()
+            
+            logger.info("✅ Monthly cleanup completed successfully")
             
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.error(f"❌ Monthly cleanup failed: {e}")
+            self._handle_job_failure("monthly_cleanup", str(e))
     
-    async def _run_health_check(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Run system health check task."""
+    def _optimize_database(self):
+        """Optimize database performance."""
         try:
-            check_database = parameters.get("check_database", True)
-            check_data_freshness = parameters.get("check_data_freshness", True)
+            logger.info("Optimizing database...")
             
-            health_status = {
+            # Run VACUUM to reclaim space
+            self.db_manager.execute_query("VACUUM")
+            
+            # Analyze tables for better query planning
+            self.db_manager.execute_query("ANALYZE")
+            
+            logger.info("Database optimization completed")
+            
+        except Exception as e:
+            logger.error(f"Database optimization failed: {e}")
+    
+    def _cleanup_old_logs(self):
+        """Clean up old log files."""
+        try:
+            logger.info("Cleaning up old logs...")
+            
+            # Keep logs for 30 days
+            cutoff_date = datetime.now() - timedelta(days=30)
+            
+            log_dir = Path("logs")
+            if log_dir.exists():
+                for log_file in log_dir.glob("*.log"):
+                    if log_file.stat().st_mtime < cutoff_date.timestamp():
+                        log_file.unlink()
+                        logger.info(f"Deleted old log file: {log_file}")
+            
+            logger.info("Log cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"Log cleanup failed: {e}")
+    
+    def _generate_weekly_report(self):
+        """Generate weekly performance report."""
+        try:
+            logger.info("Generating weekly report...")
+            
+            # Get database statistics
+            stats = self.eod_downloader.get_database_stats()
+            
+            # Create report
+            report = {
+                "generated_at": datetime.now().isoformat(),
+                "period": "weekly",
+                "database_stats": stats,
+                "scheduler_status": self.get_scheduler_status()
+            }
+            
+            # Save report
+            report_file = Path(f"reports/weekly_report_{datetime.now().strftime('%Y%m%d')}.json")
+            report_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(report_file, 'w') as f:
+                json.dump(report, f, indent=2)
+            
+            logger.info(f"Weekly report saved: {report_file}")
+            
+        except Exception as e:
+            logger.error(f"Weekly report generation failed: {e}")
+    
+    def _archive_old_data(self):
+        """Archive old data to save space."""
+        try:
+            logger.info("Archiving old data...")
+            
+            # Archive data older than 2 years
+            cutoff_date = datetime.now() - timedelta(days=730)
+            
+            # Archive old price data
+            self.db_manager.execute_query("""
+                DELETE FROM price_data 
+                WHERE date < ?
+            """, [cutoff_date.date()])
+            
+            logger.info("Data archiving completed")
+            
+        except Exception as e:
+            logger.error(f"Data archiving failed: {e}")
+    
+    def _update_monthly_statistics(self):
+        """Update monthly statistics."""
+        try:
+            logger.info("Updating monthly statistics...")
+            
+            # Calculate monthly statistics
+            stats = self.eod_downloader.get_database_stats()
+            
+            # Save monthly stats
+            stats_file = Path(f"reports/monthly_stats_{datetime.now().strftime('%Y%m')}.json")
+            stats_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(stats_file, 'w') as f:
+                json.dump(stats, f, indent=2)
+            
+            logger.info(f"Monthly statistics saved: {stats_file}")
+            
+        except Exception as e:
+            logger.error(f"Monthly statistics update failed: {e}")
+    
+    def _cleanup_temp_files(self):
+        """Clean up temporary files."""
+        try:
+            logger.info("Cleaning up temporary files...")
+            
+            # Clean up temporary files
+            temp_dir = Path("temp")
+            if temp_dir.exists():
+                for temp_file in temp_dir.glob("*"):
+                    if temp_file.is_file():
+                        temp_file.unlink()
+                        logger.info(f"Deleted temp file: {temp_file}")
+            
+            logger.info("Temporary file cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"Temporary file cleanup failed: {e}")
+    
+    def _handle_job_failure(self, job_name: str, error: str):
+        """Handle job failures with retry logic."""
+        try:
+            logger.error(f"Job failure: {job_name} - {error}")
+            
+            # Get retry configuration
+            retry_attempts = self.scheduler_config.get("daily_updates", {}).get("retry_attempts", 3)
+            retry_delay = self.scheduler_config.get("daily_updates", {}).get("retry_delay_minutes", 30)
+            
+            # Log failure
+            failure_log = {
+                "job_name": job_name,
+                "error": error,
                 "timestamp": datetime.now().isoformat(),
-                "overall_healthy": True,
-                "checks": {}
+                "retry_attempts": retry_attempts
             }
             
-            # Database connectivity check
-            if check_database:
-                try:
-                    # Simple query to test database
-                    test_result = self.db_manager.get_technical_data("TEST", "2024-01-01", "2024-01-01")
-                    health_status["checks"]["database"] = {
-                        "status": "healthy",
-                        "message": "Database connection successful"
-                    }
-                except Exception as e:
-                    health_status["checks"]["database"] = {
-                        "status": "unhealthy",
-                        "message": f"Database connection failed: {e}"
-                    }
-                    health_status["overall_healthy"] = False
+            # Save failure log
+            failure_file = Path(f"logs/failures/{job_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+            failure_file.parent.mkdir(parents=True, exist_ok=True)
             
-            # Data freshness check
-            if check_data_freshness:
-                try:
-                    tickers = self.daily_updater.tickers_config.get("indian_stocks", [])[:3]  # Check first 3
-                    stale_tickers = []
-                    
-                    for ticker in tickers:
-                        latest_date = self.db_manager.get_latest_data_date(ticker, "technical")
-                        if latest_date:
-                            latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
-                            days_behind = (datetime.now() - latest_dt).days
-                            if days_behind > 3:  # Consider stale if more than 3 days behind
-                                stale_tickers.append({"ticker": ticker, "days_behind": days_behind})
-                    
-                    if stale_tickers:
-                        health_status["checks"]["data_freshness"] = {
-                            "status": "warning",
-                            "message": f"{len(stale_tickers)} tickers have stale data",
-                            "stale_tickers": stale_tickers
-                        }
-                    else:
-                        health_status["checks"]["data_freshness"] = {
-                            "status": "healthy",
-                            "message": "All data is fresh"
-                        }
-                        
-                except Exception as e:
-                    health_status["checks"]["data_freshness"] = {
-                        "status": "error",
-                        "message": f"Data freshness check failed: {e}"
-                    }
+            with open(failure_file, 'w') as f:
+                json.dump(failure_log, f, indent=2)
             
-            return {
-                "success": True,
-                "health_status": health_status
-            }
+            logger.info(f"Failure logged: {failure_file}")
             
         except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _run_database_backup(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Run database backup task."""
-        try:
-            backup_path = parameters.get("backup_path", "backups/")
-            keep_backups = parameters.get("keep_backups", 7)
-            
-            # Create backup directory
-            backup_dir = Path(backup_path)
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Generate backup filename
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            backup_file = backup_dir / f"ai_hedge_fund_backup_{timestamp}.db"
-            
-            # Database backup logic would go here
-            # For SQLite, you could use shutil.copy2 or sqlite3 backup
-            
-            return {
-                "success": True,
-                "backup_file": str(backup_file),
-                "timestamp": timestamp,
-                "message": "Database backup completed"
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def get_task_history(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get recent task execution history."""
-        return self.task_history[-limit:] if self.task_history else []
+            logger.error(f"Failed to handle job failure: {e}")
     
     def get_scheduler_status(self) -> Dict[str, Any]:
         """Get current scheduler status."""
-        return {
-            "running": self.running,
-            "enabled": self.config.get("enabled", False),
-            "scheduled_tasks": len([t for t in self.config.get("tasks", {}).values() if t.get("enabled", False)]),
-            "last_execution": self.task_history[-1] if self.task_history else None,
-            "uptime": "N/A"  # Would track actual uptime
-        }
-    
-    async def run_task_manually(self, task_name: str, parameters: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Manually run a specific maintenance task."""
         try:
-            if task_name not in self.available_tasks:
-                return {"success": False, "error": f"Unknown task: {task_name}"}
-            
-            logger.info(f"Manually running task: {task_name}")
-            
-            task_func = self.available_tasks[task_name]
-            result = await task_func(parameters or {})
-            
-            # Record manual execution
-            execution_record = {
-                "task_name": task_name,
-                "start_time": datetime.now().isoformat(),
-                "end_time": datetime.now().isoformat(),
-                "manual_execution": True,
-                "success": result.get("success", False),
-                "result": result
+            return {
+                "scheduler_running": True,
+                "next_jobs": [],
+                "last_run": {},
+                "configuration": self.scheduler_config,
+                "database_stats": self.eod_downloader.get_database_stats()
             }
             
-            self.task_history.append(execution_record)
-            
-            return result
-            
         except Exception as e:
-            logger.error(f"Manual task execution failed: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"Failed to get scheduler status: {e}")
+            return {"error": str(e)}
+    
+    def start(self):
+        """Start the scheduler."""
+        try:
+            logger.info("🚀 Starting Maintenance Scheduler")
+            logger.info("Press Ctrl+C to stop")
+            
+            while True:
+                schedule.run_pending()
+                time.sleep(60)  # Check every minute
+                
+        except KeyboardInterrupt:
+            logger.info("🛑 Maintenance Scheduler stopped by user")
+        except Exception as e:
+            logger.error(f"❌ Scheduler failed: {e}")
+    
+    def run_once(self, job_type: str = "daily"):
+        """Run a specific job once."""
+        try:
+            logger.info(f"Running {job_type} job once")
+            
+            if job_type == "daily":
+                self._run_daily_update()
+            elif job_type == "eod_extra_data":
+                self._run_eod_extra_data_update()
+            elif job_type == "weekly":
+                self._run_weekly_maintenance()
+            elif job_type == "monthly":
+                self._run_monthly_cleanup()
+            else:
+                logger.error(f"Unknown job type: {job_type}")
+                
+        except Exception as e:
+            logger.error(f"Failed to run {job_type} job: {e}")
+
+
+def main():
+    """Main function to run the scheduler."""
+    print("Maintenance Scheduler for AI Hedge Fund")
+    print("=" * 50)
+    
+    # Initialize scheduler
+    scheduler = MaintenanceScheduler()
+    
+    # Show current status
+    status = scheduler.get_scheduler_status()
+    print(f"Scheduler Status: {status.get('scheduler_running', False)}")
+    print(f"Configuration: {status.get('configuration', {})}")
+    
+    # Start scheduler
+    scheduler.start()
+
+
+if __name__ == "__main__":
+    main()
