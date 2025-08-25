@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Enhanced EOD Screener
-Fast EOD screening using database data with CSV output.
+Unified EOD Screener
+Combines the best features of SimpleEODScreener, EnhancedEODScreener, and DuckDBEODScreener
 """
 
 import pandas as pd
@@ -14,14 +14,11 @@ import duckdb
 from loguru import logger
 import os
 
-# Import data manager
-from src.data.enhanced_indian_data_manager import enhanced_indian_data_manager
-
-class EnhancedEODScreener:
-    """Enhanced EOD screener with database integration."""
+class UnifiedEODScreener:
+    """Unified EOD screener with DuckDB integration and comprehensive analysis."""
     
-    def __init__(self):
-        self.db_path = enhanced_indian_data_manager.db_path
+    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
+        self.db_path = db_path
         self.results_dir = "results/eod_screening"
         os.makedirs(self.results_dir, exist_ok=True)
     
@@ -31,7 +28,8 @@ class EnhancedEODScreener:
                             end_date: str = None,
                             min_volume: int = 100000,
                             min_price: float = 10.0,
-                            max_workers: int = 20) -> Dict:
+                            max_workers: int = 20,
+                            analysis_mode: str = "comprehensive") -> Dict:
         """
         Screen entire universe of stocks.
         
@@ -42,8 +40,10 @@ class EnhancedEODScreener:
             min_volume: Minimum average volume
             min_price: Minimum price filter
             max_workers: Maximum concurrent workers
+            analysis_mode: "basic", "enhanced", or "comprehensive"
         """
-        logger.info("🎯 Starting Enhanced EOD Screening...")
+        logger.info("🎯 Starting Unified EOD Screening...")
+        logger.info(f"📊 Analysis Mode: {analysis_mode}")
         
         # Set default dates (last 6 months)
         if not start_date:
@@ -60,7 +60,7 @@ class EnhancedEODScreener:
         # Screen symbols concurrently
         start_time = datetime.now()
         results = await self._screen_symbols_concurrent(
-            symbols, start_date, end_date, min_volume, min_price, max_workers
+            symbols, start_date, end_date, min_volume, min_price, max_workers, analysis_mode
         )
         
         # Process results
@@ -80,6 +80,7 @@ class EnhancedEODScreener:
             'bearish_signals': len(bearish_signals),
             'screening_date': datetime.now().isoformat(),
             'date_range': {'start': start_date, 'end': end_date},
+            'analysis_mode': analysis_mode,
             'filters': {
                 'min_volume': min_volume,
                 'min_price': min_price
@@ -102,9 +103,15 @@ class EnhancedEODScreener:
     
     async def _get_all_symbols(self) -> List[str]:
         """Get all symbols from database."""
-        # Note: Securities table was removed, using price_data instead
-        symbols = enhanced_indian_data_manager.db_manager.get_available_symbols()
-        return symbols
+        try:
+            with duckdb.connect(self.db_path) as conn:
+                symbols = conn.execute(
+                    "SELECT DISTINCT symbol FROM price_data"
+                ).fetchdf()['symbol'].tolist()
+                return symbols
+        except Exception as e:
+            logger.error(f"Error getting symbols: {e}")
+            return []
     
     async def _screen_symbols_concurrent(self, 
                                        symbols: List[str],
@@ -112,7 +119,8 @@ class EnhancedEODScreener:
                                        end_date: str,
                                        min_volume: int,
                                        min_price: float,
-                                       max_workers: int) -> List[Dict]:
+                                       max_workers: int,
+                                       analysis_mode: str) -> List[Dict]:
         """Screen symbols concurrently."""
         results = []
         
@@ -120,7 +128,7 @@ class EnhancedEODScreener:
             future_to_symbol = {
                 executor.submit(
                     self._screen_single_symbol, 
-                    symbol, start_date, end_date, min_volume, min_price
+                    symbol, start_date, end_date, min_volume, min_price, analysis_mode
                 ): symbol
                 for symbol in symbols
             }
@@ -136,7 +144,7 @@ class EnhancedEODScreener:
                     logger.error(f"❌ Error screening {symbol}: {e}")
                 
                 completed += 1
-                if completed % 100 == 0:
+                if completed % 50 == 0:
                     logger.info(f"📊 Progress: {completed}/{len(symbols)}")
         
         return results
@@ -146,44 +154,36 @@ class EnhancedEODScreener:
                             start_date: str,
                             end_date: str,
                             min_volume: int,
-                            min_price: float) -> Optional[Dict]:
-        """Screen a single symbol."""
+                            min_price: float,
+                            analysis_mode: str) -> Optional[Dict]:
+        """Screen a single symbol using historical data."""
         try:
-            # Get price data from database
-            query = """
-                SELECT * FROM price_data 
-                WHERE symbol = ? AND date BETWEEN ? AND ?
-                ORDER BY date
-            """
+            # Get historical data from database
+            historical_data = self._get_historical_data(symbol, start_date, end_date)
             
-            with duckdb.connect(self.db_path) as conn:
-                df = conn.execute(query, [symbol, start_date, end_date]).fetchdf()
-            
-            if df.empty or len(df) < 30:  # Need at least 30 days of data
+            if historical_data.empty or len(historical_data) < 30:
                 return None
             
-            # Convert to proper format
-            df['date'] = pd.to_datetime(df['date'])
-            df.set_index('date', inplace=True)
+            # Get current price and volume from latest data
+            current_price = historical_data['close_price'].iloc[-1]
+            volume = historical_data['volume'].iloc[-1]
+            avg_volume = historical_data['volume'].rolling(20).mean().iloc[-1]
             
             # Apply filters
-            avg_volume = df['volume'].mean()
-            avg_price = df['close_price'].mean()
-            
-            if avg_volume < min_volume or avg_price < min_price:
+            if avg_volume < min_volume or current_price < min_price:
                 return None
             
-            # Calculate technical indicators
-            indicators = self._calculate_indicators(df)
+            # Calculate indicators based on analysis mode
+            indicators = self._calculate_indicators(historical_data, analysis_mode)
             
-            # Generate signal
-            signal = self._generate_signal(indicators, df)
+            # Generate signal based on analysis mode
+            signal = self._generate_signal(indicators, historical_data, analysis_mode)
             
             if signal['signal'] == 'NEUTRAL':
                 return None
             
-            # Calculate entry, SL, targets
-            levels = self._calculate_levels(df, signal['signal'])
+            # Calculate levels
+            levels = self._calculate_levels(historical_data, signal['signal'])
             
             return {
                 'symbol': symbol,
@@ -194,9 +194,10 @@ class EnhancedEODScreener:
                 'stop_loss': levels['stop_loss'],
                 'targets': levels['targets'],
                 'risk_reward_ratio': levels['risk_reward'],
-                'current_price': df['close_price'].iloc[-1],
+                'current_price': current_price,
+                'volume': volume,
                 'avg_volume': avg_volume,
-                'avg_price': avg_price,
+                'analysis_mode': analysis_mode,
                 'screening_date': datetime.now().isoformat()
             }
             
@@ -204,20 +205,39 @@ class EnhancedEODScreener:
             logger.error(f"❌ Error screening {symbol}: {e}")
             return None
     
-    def _calculate_indicators(self, df: pd.DataFrame) -> Dict:
-        """Calculate technical indicators."""
+    def _get_historical_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """Get historical data from database."""
+        try:
+            query = """
+                SELECT * FROM price_data 
+                WHERE symbol = ? AND date BETWEEN ? AND ?
+                ORDER BY date
+            """
+            
+            with duckdb.connect(self.db_path) as conn:
+                df = conn.execute(query, [symbol, start_date, end_date]).fetchdf()
+            
+            if not df.empty:
+                df['date'] = pd.to_datetime(df['date'])
+                df.set_index('date', inplace=True)
+                df = df.sort_index()  # Sort by date ascending
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting historical data for {symbol}: {e}")
+            return pd.DataFrame()
+    
+    def _calculate_indicators(self, df: pd.DataFrame, analysis_mode: str) -> Dict:
+        """Calculate technical indicators based on analysis mode."""
         indicators = {}
         
-        # Moving averages
+        if df.empty or len(df) < 20:
+            return indicators
+        
+        # Basic indicators (all modes)
         indicators['sma_20'] = df['close_price'].rolling(20).mean()
         indicators['sma_50'] = df['close_price'].rolling(50).mean()
-        indicators['ema_12'] = df['close_price'].ewm(span=12).mean()
-        indicators['ema_26'] = df['close_price'].ewm(span=26).mean()
-        
-        # MACD
-        indicators['macd'] = indicators['ema_12'] - indicators['ema_26']
-        indicators['macd_signal'] = indicators['macd'].ewm(span=9).mean()
-        indicators['macd_histogram'] = indicators['macd'] - indicators['macd_signal']
         
         # RSI
         delta = df['close_price'].diff()
@@ -226,13 +246,7 @@ class EnhancedEODScreener:
         rs = gain / loss
         indicators['rsi'] = 100 - (100 / (1 + rs))
         
-        # Bollinger Bands
-        indicators['bb_middle'] = df['close_price'].rolling(20).mean()
-        bb_std = df['close_price'].rolling(20).std()
-        indicators['bb_upper'] = indicators['bb_middle'] + (bb_std * 2)
-        indicators['bb_lower'] = indicators['bb_middle'] - (bb_std * 2)
-        
-        # Volume indicators
+        # Volume analysis
         indicators['volume_sma'] = df['volume'].rolling(20).mean()
         indicators['volume_ratio'] = df['volume'] / indicators['volume_sma']
         
@@ -240,10 +254,27 @@ class EnhancedEODScreener:
         indicators['high_20'] = df['high_price'].rolling(20).max()
         indicators['low_20'] = df['low_price'].rolling(20).min()
         
+        # Enhanced indicators (enhanced and comprehensive modes)
+        if analysis_mode in ['enhanced', 'comprehensive']:
+            # EMA
+            indicators['ema_12'] = df['close_price'].ewm(span=12).mean()
+            indicators['ema_26'] = df['close_price'].ewm(span=26).mean()
+            
+            # MACD
+            indicators['macd'] = indicators['ema_12'] - indicators['ema_26']
+            indicators['macd_signal'] = indicators['macd'].ewm(span=9).mean()
+            indicators['macd_histogram'] = indicators['macd'] - indicators['macd_signal']
+            
+            # Bollinger Bands
+            indicators['bb_middle'] = df['close_price'].rolling(20).mean()
+            bb_std = df['close_price'].rolling(20).std()
+            indicators['bb_upper'] = indicators['bb_middle'] + (bb_std * 2)
+            indicators['bb_lower'] = indicators['bb_middle'] - (bb_std * 2)
+        
         return indicators
     
-    def _generate_signal(self, indicators: Dict, df: pd.DataFrame) -> Dict:
-        """Generate trading signal based on indicators."""
+    def _generate_signal(self, indicators: Dict, df: pd.DataFrame, analysis_mode: str) -> Dict:
+        """Generate trading signal based on analysis mode."""
         current_price = df['close_price'].iloc[-1]
         reasons = []
         confidence = 0
@@ -260,26 +291,33 @@ class EnhancedEODScreener:
             bullish_score += 1
             reasons.append("Price above 50-day SMA")
         
-        # MACD bullish
-        if (indicators['macd'].iloc[-1] > indicators['macd_signal'].iloc[-1] and 
-            indicators['macd_histogram'].iloc[-1] > indicators['macd_histogram'].iloc[-2]):
-            bullish_score += 2
-            reasons.append("MACD bullish crossover")
-        
-        # RSI oversold bounce
-        if 30 < indicators['rsi'].iloc[-1] < 50:
+        # RSI analysis
+        if 30 < indicators['rsi'].iloc[-1] < 70:
             bullish_score += 1
-            reasons.append("RSI oversold bounce")
+            reasons.append("RSI in neutral zone")
         
         # Volume confirmation
         if indicators['volume_ratio'].iloc[-1] > 1.5:
             bullish_score += 1
             reasons.append("High volume confirmation")
         
-        # Breakout from Bollinger Bands
-        if current_price > indicators['bb_upper'].iloc[-1]:
-            bullish_score += 2
-            reasons.append("Breakout above Bollinger Bands")
+        # Enhanced analysis for enhanced and comprehensive modes
+        if analysis_mode in ['enhanced', 'comprehensive']:
+            # MACD bullish
+            if (indicators['macd'].iloc[-1] > indicators['macd_signal'].iloc[-1] and 
+                indicators['macd_histogram'].iloc[-1] > indicators['macd_histogram'].iloc[-2]):
+                bullish_score += 2
+                reasons.append("MACD bullish crossover")
+            
+            # RSI oversold bounce
+            if 30 < indicators['rsi'].iloc[-1] < 50:
+                bullish_score += 1
+                reasons.append("RSI oversold bounce")
+            
+            # Breakout from Bollinger Bands
+            if current_price > indicators['bb_upper'].iloc[-1]:
+                bullish_score += 2
+                reasons.append("Breakout above Bollinger Bands")
         
         # Check for bearish signals
         bearish_score = 0
@@ -291,26 +329,38 @@ class EnhancedEODScreener:
         if current_price < indicators['sma_50'].iloc[-1]:
             bearish_score += 1
         
-        # MACD bearish
-        if (indicators['macd'].iloc[-1] < indicators['macd_signal'].iloc[-1] and 
-            indicators['macd_histogram'].iloc[-1] < indicators['macd_histogram'].iloc[-2]):
-            bearish_score += 2
-        
         # RSI overbought
         if indicators['rsi'].iloc[-1] > 70:
             bearish_score += 1
         
-        # Breakdown from Bollinger Bands
-        if current_price < indicators['bb_lower'].iloc[-1]:
-            bearish_score += 2
+        # Enhanced analysis for enhanced and comprehensive modes
+        if analysis_mode in ['enhanced', 'comprehensive']:
+            # MACD bearish
+            if (indicators['macd'].iloc[-1] < indicators['macd_signal'].iloc[-1] and 
+                indicators['macd_histogram'].iloc[-1] < indicators['macd_histogram'].iloc[-2]):
+                bearish_score += 2
+            
+            # Breakdown from Bollinger Bands
+            if current_price < indicators['bb_lower'].iloc[-1]:
+                bearish_score += 2
         
-        # Determine signal
-        if bullish_score >= 4 and bullish_score > bearish_score:
+        # Determine signal based on analysis mode
+        if analysis_mode == 'basic':
+            required_score = 3
+            confidence_multiplier = 15
+        elif analysis_mode == 'enhanced':
+            required_score = 4
+            confidence_multiplier = 12
+        else:  # comprehensive
+            required_score = 5
+            confidence_multiplier = 10
+        
+        if bullish_score >= required_score and bullish_score > bearish_score:
             signal = 'BULLISH'
-            confidence = min(90, 50 + (bullish_score * 10))
-        elif bearish_score >= 4 and bearish_score > bullish_score:
+            confidence = min(90, 50 + (bullish_score * confidence_multiplier))
+        elif bearish_score >= required_score and bearish_score > bullish_score:
             signal = 'BEARISH'
-            confidence = min(90, 50 + (bearish_score * 10))
+            confidence = min(90, 50 + (bearish_score * confidence_multiplier))
             reasons = [f"Bearish: {r}" for r in reasons]
         else:
             signal = 'NEUTRAL'
@@ -373,32 +423,32 @@ class EnhancedEODScreener:
         return atr
     
     async def _save_results_to_csv(self, 
-                                 bullish_signals: List[Dict],
-                                 bearish_signals: List[Dict],
-                                 summary: Dict):
+                                  bullish_signals: List[Dict],
+                                  bearish_signals: List[Dict],
+                                  summary: Dict):
         """Save screening results to CSV files."""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         # Save bullish signals
         if bullish_signals:
             bullish_df = pd.DataFrame(bullish_signals)
-            bullish_file = f"{self.results_dir}/bullish_signals_{timestamp}.csv"
+            bullish_file = f"{self.results_dir}/unified_bullish_signals_{timestamp}.csv"
             bullish_df.to_csv(bullish_file, index=False)
             logger.info(f"📈 Bullish signals saved to {bullish_file}")
         
         # Save bearish signals
         if bearish_signals:
             bearish_df = pd.DataFrame(bearish_signals)
-            bearish_file = f"{self.results_dir}/bearish_signals_{timestamp}.csv"
+            bearish_file = f"{self.results_dir}/unified_bearish_signals_{timestamp}.csv"
             bearish_df.to_csv(bearish_file, index=False)
             logger.info(f"📉 Bearish signals saved to {bearish_file}")
         
         # Save summary
-        summary_file = f"{self.results_dir}/screening_summary_{timestamp}.json"
+        summary_file = f"{self.results_dir}/unified_screening_summary_{timestamp}.json"
         with open(summary_file, 'w') as f:
             import json
             json.dump(summary, f, indent=2)
         logger.info(f"📊 Summary saved to {summary_file}")
 
 # Global instance
-enhanced_eod_screener = EnhancedEODScreener() 
+unified_eod_screener = UnifiedEODScreener()
