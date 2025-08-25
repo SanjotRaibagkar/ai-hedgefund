@@ -51,27 +51,15 @@ class AutoMarketHoursScheduler:
             
             # Check if it's weekend
             if today.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                self.logger.info("📅 Weekend - not a trading day")
                 return False
             
-            # Check trading holidays (cache for 1 day)
-            if (self.last_holiday_check is None or 
-                self.last_holiday_check.date() != today):
+            # Check if today is a trading holiday using the correct method
+            is_holiday = self.nse.is_nse_trading_holiday()
+            if is_holiday:
+                self.logger.info("📅 Trading holiday - not a trading day")
+                return False
                 
-                self.trading_holidays = self.nse.trading_holidays()
-                self.last_holiday_check = datetime.now()
-                
-                self.logger.info(f"📅 Updated trading holidays cache")
-            
-            if self.trading_holidays is not None:
-                try:
-                    holiday_dates = [holiday['date'] for holiday in self.trading_holidays]
-                    if today.strftime('%Y-%m-%d') in holiday_dates:
-                        self.logger.info(f"📅 Today is a trading holiday")
-                        return False
-                except (KeyError, TypeError):
-                    # If holiday data format is unexpected, just log and continue
-                    self.logger.warning(f"⚠️ Could not parse trading holidays, assuming trading day")
-            
             return True
             
         except Exception as e:

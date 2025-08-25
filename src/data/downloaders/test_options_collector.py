@@ -13,7 +13,7 @@ import pandas as pd
 from datetime import datetime
 from loguru import logger
 
-from .options_chain_collector import OptionsChainCollector
+from src.data.downloaders.options_chain_collector import OptionsChainCollector
 
 
 def test_options_collector():

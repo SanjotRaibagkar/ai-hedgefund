@@ -18,23 +18,23 @@ from loguru import logger
 import duckdb
 
 from src.nsedata.NseUtility import NseUtils
-from src.data.database.duckdb_manager import DatabaseManager
+from src.data.database.options_db_manager import OptionsDatabaseManager
 
 
 class OptionsChainCollector:
     """Collects options chain data and futures spot prices at 1-minute intervals."""
     
-    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
+    def __init__(self, db_path: str = "data/options_chain_data.duckdb"):
         """
         Initialize the options chain collector.
         
         Args:
-            db_path: Path to DuckDB database
+            db_path: Path to DuckDB database for options data
         """
         self.db_path = db_path
         self.nse = NseUtils()
-        self.db_manager = DatabaseManager(db_path)
-        self.connection = duckdb.connect(db_path)
+        self.db_manager = OptionsDatabaseManager(db_path)
+        self.connection = self.db_manager.connection
         
         # Trading hours (IST)
         self.market_open = "09:30"
@@ -224,8 +224,8 @@ class OptionsChainCollector:
             # Convert to DataFrame
             df = pd.DataFrame(records)
             
-            # Insert into database using pandas to_sql method
-            df.to_sql('options_chain_data', self.connection, if_exists='append', index=False, method='multi')
+            # Use the options database manager to insert data
+            self.db_manager.insert_options_data(df)
             
             logger.info(f"✅ Inserted {len(records)} options records into database")
             return True
