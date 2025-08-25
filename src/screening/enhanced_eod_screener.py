@@ -15,13 +15,13 @@ from loguru import logger
 import os
 
 # Import data manager
-from src.data.indian_data_manager import indian_data_manager
+from src.data.enhanced_indian_data_manager import enhanced_indian_data_manager
 
 class EnhancedEODScreener:
     """Enhanced EOD screener with database integration."""
     
     def __init__(self):
-        self.db_path = indian_data_manager.db_path
+        self.db_path = enhanced_indian_data_manager.db_path
         self.results_dir = "results/eod_screening"
         os.makedirs(self.results_dir, exist_ok=True)
     
@@ -102,11 +102,8 @@ class EnhancedEODScreener:
     
     async def _get_all_symbols(self) -> List[str]:
         """Get all symbols from database."""
-        with sqlite3.connect(self.db_path) as conn:
-            symbols = pd.read_sql_query(
-                "SELECT symbol FROM securities WHERE is_active = 1", 
-                conn
-            )['symbol'].tolist()
+        # Note: Securities table was removed, using price_data instead
+        symbols = enhanced_indian_data_manager.db_manager.get_available_symbols()
         return symbols
     
     async def _screen_symbols_concurrent(self, 

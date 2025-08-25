@@ -1,9 +1,9 @@
 """
-SQLite Database Manager for AI Hedge Fund Data Storage
+DuckDB Database Manager for AI Hedge Fund Data Storage
 """
 
 import os
-import sqlite3
+import duckdb
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Union
@@ -20,14 +20,14 @@ from .models import (
 )
 
 class DatabaseManager:
-    """Manages SQLite database operations for the AI Hedge Fund."""
+    """Manages DuckDB database operations for the AI Hedge Fund."""
     
-    def __init__(self, db_path: str = "data/ai_hedge_fund.db"):
+    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
         """
-        Initialize SQLite database manager.
+        Initialize DuckDB database manager.
         
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to DuckDB database file
         """
         self.db_path = db_path
         self.connection = None
@@ -42,134 +42,146 @@ class DatabaseManager:
     def _initialize_database(self):
         """Initialize database connection and create tables."""
         try:
-            self.connection = sqlite3.connect(self.db_path)
-            self.connection.row_factory = sqlite3.Row  # Enable dict-like access
+            self.connection = duckdb.connect(self.db_path)
             self._create_tables()
-            logger.info(f"SQLite database initialized successfully at {self.db_path}")
+            logger.info(f"DuckDB database initialized successfully at {self.db_path}")
         except Exception as e:
-            logger.error(f"Failed to initialize SQLite database: {e}")
+            logger.error(f"Failed to initialize DuckDB database: {e}")
             raise
             
     def _create_tables(self):
         """Create database tables if they don't exist."""
         
-        # Technical Data Table
+        # Drop existing tables to ensure schema consistency
+        logger.info("🔄 Dropping existing tables for schema consistency...")
+        self.connection.execute("DROP TABLE IF EXISTS technical_data")
+        self.connection.execute("DROP TABLE IF EXISTS fundamental_data")
+        self.connection.execute("DROP TABLE IF EXISTS market_data")
+        self.connection.execute("DROP TABLE IF EXISTS corporate_actions")
+        self.connection.execute("DROP TABLE IF EXISTS data_quality_metrics")
+        
+        # Technical Data Table with foreign key to price_data
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS technical_data (
-                ticker TEXT,
-                trade_date TEXT,
-                open_price REAL,
-                high_price REAL,
-                low_price REAL,
-                close_price REAL,
-                volume INTEGER,
-                adjusted_close REAL,
-                sma_20 REAL,
-                sma_50 REAL,
-                sma_200 REAL,
-                rsi_14 REAL,
-                macd REAL,
-                macd_signal REAL,
-                macd_histogram REAL,
-                bollinger_upper REAL,
-                bollinger_lower REAL,
-                bollinger_middle REAL,
-                atr_14 REAL,
-                created_at TEXT,
-                updated_at TEXT,
-                PRIMARY KEY (ticker, trade_date)
+                ticker VARCHAR,
+                trade_date DATE,
+                open_price DOUBLE,
+                high_price DOUBLE,
+                low_price DOUBLE,
+                close_price DOUBLE,
+                volume BIGINT,
+                adjusted_close DOUBLE,
+                sma_20 DOUBLE,
+                sma_50 DOUBLE,
+                sma_200 DOUBLE,
+                rsi_14 DOUBLE,
+                macd DOUBLE,
+                macd_signal DOUBLE,
+                macd_histogram DOUBLE,
+                bollinger_upper DOUBLE,
+                bollinger_lower DOUBLE,
+                bollinger_middle DOUBLE,
+                atr_14 DOUBLE,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                PRIMARY KEY (ticker, trade_date),
+                FOREIGN KEY (ticker, trade_date) REFERENCES price_data(symbol, date)
             )
         """)
         
-        # Fundamental Data Table
+        # Fundamental Data Table with foreign key to price_data
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS fundamental_data (
-                ticker TEXT,
-                report_date TEXT,
-                period_type TEXT,
-                revenue REAL,
-                net_income REAL,
-                total_assets REAL,
-                total_liabilities REAL,
-                total_equity REAL,
-                operating_cash_flow REAL,
-                free_cash_flow REAL,
-                debt_to_equity REAL,
-                roe REAL,
-                roa REAL,
-                pe_ratio REAL,
-                pb_ratio REAL,
-                ps_ratio REAL,
-                dividend_yield REAL,
-                market_cap REAL,
-                enterprise_value REAL,
-                created_at TEXT,
-                updated_at TEXT,
-                PRIMARY KEY (ticker, report_date, period_type)
+                ticker VARCHAR,
+                report_date DATE,
+                period_type VARCHAR,
+                revenue DOUBLE,
+                net_income DOUBLE,
+                total_assets DOUBLE,
+                total_liabilities DOUBLE,
+                total_equity DOUBLE,
+                operating_cash_flow DOUBLE,
+                free_cash_flow DOUBLE,
+                debt_to_equity DOUBLE,
+                roe DOUBLE,
+                roa DOUBLE,
+                pe_ratio DOUBLE,
+                pb_ratio DOUBLE,
+                ps_ratio DOUBLE,
+                dividend_yield DOUBLE,
+                market_cap DOUBLE,
+                enterprise_value DOUBLE,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                PRIMARY KEY (ticker, report_date, period_type),
+                FOREIGN KEY (ticker, report_date) REFERENCES price_data(symbol, date)
             )
         """)
         
-        # Market Data Table
+        # Market Data Table with foreign key to price_data
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS market_data (
-                ticker TEXT,
-                market_date TEXT,
-                market_cap REAL,
-                enterprise_value REAL,
-                beta REAL,
-                dividend_yield REAL,
-                payout_ratio REAL,
-                price_to_book REAL,
-                price_to_sales REAL,
-                price_to_earnings REAL,
-                forward_pe REAL,
-                peg_ratio REAL,
-                created_at TEXT,
-                updated_at TEXT,
-                PRIMARY KEY (ticker, market_date)
+                ticker VARCHAR,
+                market_date DATE,
+                market_cap DOUBLE,
+                enterprise_value DOUBLE,
+                beta DOUBLE,
+                dividend_yield DOUBLE,
+                payout_ratio DOUBLE,
+                price_to_book DOUBLE,
+                price_to_sales DOUBLE,
+                price_to_earnings DOUBLE,
+                forward_pe DOUBLE,
+                peg_ratio DOUBLE,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                PRIMARY KEY (ticker, market_date),
+                FOREIGN KEY (ticker, market_date) REFERENCES price_data(symbol, date)
             )
         """)
         
-        # Corporate Actions Table
+        # Corporate Actions Table with foreign key to price_data
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS corporate_actions (
-                ticker TEXT,
-                action_date TEXT,
-                action_type TEXT,
-                description TEXT,
-                value REAL,
-                ratio TEXT,
-                ex_date TEXT,
-                record_date TEXT,
-                payment_date TEXT,
-                created_at TEXT,
-                updated_at TEXT,
-                PRIMARY KEY (ticker, action_date, action_type)
+                ticker VARCHAR,
+                action_date DATE,
+                action_type VARCHAR,
+                description VARCHAR,
+                value DOUBLE,
+                ratio VARCHAR,
+                ex_date DATE,
+                record_date DATE,
+                payment_date DATE,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                PRIMARY KEY (ticker, action_date, action_type),
+                FOREIGN KEY (ticker, action_date) REFERENCES price_data(symbol, date)
             )
         """)
         
         # Data Quality Metrics Table
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS data_quality_metrics (
-                ticker TEXT,
-                quality_date TEXT,
-                data_type TEXT,
-                completeness_score REAL,
-                accuracy_score REAL,
-                timeliness_score REAL,
-                consistency_score REAL,
+                ticker VARCHAR,
+                quality_date DATE,
+                data_type VARCHAR,
+                completeness_score DOUBLE,
+                accuracy_score DOUBLE,
+                timeliness_score DOUBLE,
+                consistency_score DOUBLE,
                 total_records INTEGER,
                 missing_records INTEGER,
                 error_count INTEGER,
-                last_updated TEXT,
-                created_at TEXT,
+                last_updated TIMESTAMP,
+                created_at TIMESTAMP,
                 PRIMARY KEY (ticker, quality_date, data_type)
             )
         """)
         
+        logger.info("✅ All tables created with consistent schema")
+        
         # Create indexes for better performance
         self._create_indexes()
-        self.connection.commit()
         
     def _create_indexes(self):
         """Create database indexes for better query performance."""
@@ -212,19 +224,22 @@ class DatabaseManager:
             }
             df = df.rename(columns=column_mapping)
             
-            # Convert date columns to string format
+            # Ensure date columns are in proper format for DuckDB
             if 'trade_date' in df.columns:
-                df['trade_date'] = df['trade_date'].astype(str)
+                df['trade_date'] = pd.to_datetime(df['trade_date']).dt.date
             
-            # Insert data
-            df.to_sql('technical_data', self.connection, if_exists='append', 
-                     method='multi', index=False)
-            self.connection.commit()
+            # Ensure timestamp columns are in proper format
+            if 'created_at' not in df.columns:
+                df['created_at'] = datetime.now()
+            if 'updated_at' not in df.columns:
+                df['updated_at'] = datetime.now()
+            
+            # Insert data using DuckDB's efficient DataFrame insertion
+            self.connection.execute("INSERT INTO technical_data SELECT * FROM df")
             
             logger.info(f"Inserted {len(df)} technical data records")
             
         except Exception as e:
-            self.connection.rollback()
             logger.error(f"Failed to insert technical data: {e}")
             raise
     
@@ -243,19 +258,22 @@ class DatabaseManager:
             }
             df = df.rename(columns=column_mapping)
             
-            # Convert date columns to string format
+            # Ensure date columns are in proper format for DuckDB
             if 'report_date' in df.columns:
-                df['report_date'] = df['report_date'].astype(str)
+                df['report_date'] = pd.to_datetime(df['report_date']).dt.date
             
-            # Insert data
-            df.to_sql('fundamental_data', self.connection, if_exists='append', 
-                     method='multi', index=False)
-            self.connection.commit()
+            # Ensure timestamp columns are in proper format
+            if 'created_at' not in df.columns:
+                df['created_at'] = datetime.now()
+            if 'updated_at' not in df.columns:
+                df['updated_at'] = datetime.now()
+            
+            # Insert data using DuckDB's efficient DataFrame insertion
+            self.connection.execute("INSERT INTO fundamental_data SELECT * FROM df")
             
             logger.info(f"Inserted {len(df)} fundamental data records")
             
         except Exception as e:
-            self.connection.rollback()
             logger.error(f"Failed to insert fundamental data: {e}")
             raise
     
@@ -276,11 +294,7 @@ class DatabaseManager:
             
             query += " ORDER BY trade_date"
             
-            df = pd.read_sql_query(query, self.connection, params=params)
-            
-            # Convert date columns back to datetime
-            if 'trade_date' in df.columns:
-                df['trade_date'] = pd.to_datetime(df['trade_date'])
+            df = self.connection.execute(query, params).fetchdf()
             
             logger.info(f"Retrieved {len(df)} technical data records for {ticker}")
             return df
@@ -311,11 +325,7 @@ class DatabaseManager:
             
             query += " ORDER BY report_date"
             
-            df = pd.read_sql_query(query, self.connection, params=params)
-            
-            # Convert date columns back to datetime
-            if 'report_date' in df.columns:
-                df['report_date'] = pd.to_datetime(df['report_date'])
+            df = self.connection.execute(query, params).fetchdf()
             
             logger.info(f"Retrieved {len(df)} fundamental data records for {ticker}")
             return df
@@ -334,9 +344,7 @@ class DatabaseManager:
             else:
                 raise ValueError(f"Unsupported data type: {data_type}")
             
-            cursor = self.connection.cursor()
-            cursor.execute(query, (ticker,))
-            result = cursor.fetchone()
+            result = self.connection.execute(query, [ticker]).fetchone()
             
             return result[0] if result and result[0] else None
             
@@ -353,11 +361,7 @@ class DatabaseManager:
                 ORDER BY quality_date DESC
             """
             
-            df = pd.read_sql_query(query, self.connection, params=[ticker, data_type])
-            
-            # Convert date columns back to datetime
-            if 'quality_date' in df.columns:
-                df['quality_date'] = pd.to_datetime(df['quality_date'])
+            df = self.connection.execute(query, [ticker, data_type]).fetchdf()
             
             return df
             
@@ -388,9 +392,9 @@ class DatabaseManager:
             else:
                 raise ValueError(f"Unsupported data type: {data_type}")
             
-            cursor = self.connection.cursor()
-            cursor.execute(query, (ticker, start_date, end_date))
-            existing_dates = [row[0] for row in cursor.fetchall()]
+            result = self.connection.execute(query, [ticker, start_date, end_date]).fetchall()
+            existing_dates = [row[0].strftime('%Y-%m-%d') if hasattr(row[0], 'strftime') else str(row[0]) 
+                            for row in result]
             
             # Find missing dates
             missing_dates = [date for date in trading_days if date not in existing_dates]
@@ -399,6 +403,46 @@ class DatabaseManager:
             
         except Exception as e:
             logger.error(f"Failed to get missing data dates: {e}")
+            raise
+    
+    def get_price_data(self, ticker: str, start_date: Optional[str] = None, 
+                      end_date: Optional[str] = None) -> pd.DataFrame:
+        """Retrieve price data from the master price_data table."""
+        try:
+            query = "SELECT * FROM price_data WHERE symbol = ?"
+            params = [ticker]
+            
+            if start_date:
+                query += " AND date >= ?"
+                params.append(start_date)
+            
+            if end_date:
+                query += " AND date <= ?"
+                params.append(end_date)
+            
+            query += " ORDER BY date"
+            
+            df = self.connection.execute(query, params).fetchdf()
+            
+            logger.info(f"Retrieved {len(df)} price data records for {ticker}")
+            return df
+            
+        except Exception as e:
+            logger.error(f"Failed to retrieve price data: {e}")
+            raise
+    
+    def get_available_symbols(self) -> List[str]:
+        """Get list of all available symbols in price_data table."""
+        try:
+            query = "SELECT DISTINCT symbol FROM price_data ORDER BY symbol"
+            result = self.connection.execute(query).fetchall()
+            symbols = [row[0] for row in result]
+            
+            logger.info(f"Retrieved {len(symbols)} available symbols")
+            return symbols
+            
+        except Exception as e:
+            logger.error(f"Failed to get available symbols: {e}")
             raise
     
     def close(self):
