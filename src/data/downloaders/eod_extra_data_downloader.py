@@ -15,6 +15,12 @@ from src.nsedata.NseUtility import NseUtils
 import json
 from typing import List, Dict, Optional, Tuple, Any
 import sys
+import threading
+from queue import Queue
+import math
+import threading
+from queue import Queue
+import math
 
 # Setup logging
 logging.basicConfig(
@@ -36,9 +42,10 @@ class EODExtraDataDownloader:
         self.db_path = db_path
         self.nse = NseUtils()
         self.progress_file = "eod_extra_download_progress.json"
-        self.max_workers = 5
+        self.max_workers = 10  # Increased for better performance
         self.retry_attempts = 3
-        self.delay_between_requests = 0.5
+        self.delay_between_requests = 0.2  # Reduced delay for faster downloads
+        self.db_lock = threading.Lock()  # Thread-safe database operations
         
         # Initialize database
         self._init_database()
@@ -53,25 +60,47 @@ class EODExtraDataDownloader:
         # Connect to DuckDB
         self.conn = duckdb.connect(self.db_path)
         
-        # Create FNO Bhav Copy table
+        # Drop and recreate FNO Bhav Copy table to ensure correct schema
+        self.conn.execute('DROP TABLE IF EXISTS fno_bhav_copy')
         self.conn.execute('''
-            CREATE TABLE IF NOT EXISTS fno_bhav_copy (
-                SYMBOL VARCHAR,
-                EXPIRY_DT VARCHAR,
-                STRIKE_PRICE DOUBLE,
-                OPTION_TYP VARCHAR,
-                OPEN DOUBLE,
-                HIGH DOUBLE,
-                LOW DOUBLE,
-                CLOSE DOUBLE,
-                SETTLE_PR DOUBLE,
-                CONTRACTS BIGINT,
-                VAL_INLAKH DOUBLE,
-                OPEN_INT BIGINT,
-                CHG_IN_OI BIGINT,
+            CREATE TABLE fno_bhav_copy (
+                TradDt VARCHAR,
+                BizDt VARCHAR,
+                Sgmt VARCHAR,
+                Src VARCHAR,
+                FinInstrmTp VARCHAR,
+                FinInstrmId VARCHAR,
+                ISIN VARCHAR,
+                TckrSymb VARCHAR,
+                SctySrs VARCHAR,
+                XpryDt VARCHAR,
+                FininstrmActlXpryDt VARCHAR,
+                StrkPric DOUBLE,
+                OptnTp VARCHAR,
+                FinInstrmNm VARCHAR,
+                OpnPric DOUBLE,
+                HghPric DOUBLE,
+                LwPric DOUBLE,
+                ClsPric DOUBLE,
+                LastPric DOUBLE,
+                PrvsClsgPric DOUBLE,
+                UndrlygPric DOUBLE,
+                SttlmPric DOUBLE,
+                OpnIntrst BIGINT,
+                ChngInOpnIntrst BIGINT,
+                TtlTradgVol BIGINT,
+                TtlTrfVal DOUBLE,
+                TtlNbOfTxsExctd BIGINT,
+                SsnId VARCHAR,
+                NewBrdLotQty BIGINT,
+                Rmks VARCHAR,
+                Rsvd1 VARCHAR,
+                Rsvd2 VARCHAR,
+                Rsvd3 VARCHAR,
+                Rsvd4 VARCHAR,
                 TRADE_DATE DATE,
                 last_updated TIMESTAMP,
-                PRIMARY KEY (SYMBOL, EXPIRY_DT, STRIKE_PRICE, OPTION_TYP, TRADE_DATE)
+                PRIMARY KEY (FinInstrmId, TRADE_DATE)
             )
         ''')
         
@@ -112,8 +141,8 @@ class EODExtraDataDownloader:
                 Change_Percent DOUBLE,
                 Volume DOUBLE,
                 Turnover_Crs DOUBLE,
-                P/E DOUBLE,
-                P/B DOUBLE,
+                PE_Ratio DOUBLE,
+                PB_Ratio DOUBLE,
                 Div_Yield DOUBLE,
                 TRADE_DATE DATE,
                 last_updated TIMESTAMP,
@@ -122,26 +151,25 @@ class EODExtraDataDownloader:
         ''')
         
         # Create FII DII Activity table
+        self.conn.execute('DROP TABLE IF EXISTS fii_dii_activity')
         self.conn.execute('''
-            CREATE TABLE IF NOT EXISTS fii_dii_activity (
+            CREATE TABLE fii_dii_activity (
                 category VARCHAR,
+                date VARCHAR,
                 buyValue DOUBLE,
-                buyQuantity BIGINT,
                 sellValue DOUBLE,
-                sellQuantity BIGINT,
                 netValue DOUBLE,
-                netQuantity BIGINT,
-                activity_date DATE,
+                TRADE_DATE DATE,
                 last_updated TIMESTAMP,
-                PRIMARY KEY (category, activity_date)
+                PRIMARY KEY (category, date)
             )
         ''')
         
         # Create indexes for better performance
-        self.conn.execute('CREATE INDEX IF NOT EXISTS idx_fno_symbol_date ON fno_bhav_copy(SYMBOL, TRADE_DATE)')
+        self.conn.execute('CREATE INDEX IF NOT EXISTS idx_fno_symbol_date ON fno_bhav_copy(TckrSymb, TRADE_DATE)')
         self.conn.execute('CREATE INDEX IF NOT EXISTS idx_equity_symbol_date ON equity_bhav_copy_delivery(SYMBOL, TRADE_DATE)')
         self.conn.execute('CREATE INDEX IF NOT EXISTS idx_indices_name_date ON bhav_copy_indices(Index_Name, TRADE_DATE)')
-        self.conn.execute('CREATE INDEX IF NOT EXISTS idx_fii_category_date ON fii_dii_activity(category, activity_date)')
+        self.conn.execute('CREATE INDEX IF NOT EXISTS idx_fii_category_date ON fii_dii_activity(category, date)')
         
         logger.info(f"EOD Extra Data tables initialized in: {self.db_path}")
     
@@ -167,9 +195,357 @@ class EODExtraDataDownloader:
                 json.dump(self.progress, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving progress: {e}")
-    
+
+    def _download_single_date_fno(self, date_tuple: Tuple[datetime, str]) -> Dict[str, Any]:
+        """Download FNO data for a single date (thread-safe)."""
+        current_dt, trade_date_str = date_tuple
+        result = {'success': False, 'records': 0, 'date': trade_date_str, 'error': None}
+        
+        try:
+            # Create thread-local NSE instance
+            nse = NseUtils()
+            
+            # Download data
+            df = nse.fno_bhav_copy(trade_date_str)
+            
+            if not df.empty:
+                # Add trade date and timestamp
+                df['TRADE_DATE'] = current_dt.date()
+                df['last_updated'] = datetime.now().isoformat()
+                
+                # Thread-safe database operations
+                with self.db_lock:
+                    self.conn.execute("DELETE FROM fno_bhav_copy WHERE TRADE_DATE = ?", [current_dt.date()])
+                    self.conn.execute("INSERT INTO fno_bhav_copy SELECT * FROM df")
+                
+                result['success'] = True
+                result['records'] = len(df)
+                logger.info(f"SUCCESS: FNO Bhav Copy for {trade_date_str}: {len(df)} records")
+            
+            time.sleep(self.delay_between_requests)
+            
+        except Exception as e:
+            result['error'] = str(e)
+            logger.error(f"FAILED: FNO Bhav Copy for {trade_date_str}: {e}")
+        
+        return result
+
+    def _download_single_date_equity(self, date_tuple: Tuple[datetime, str]) -> Dict[str, Any]:
+        """Download Equity data for a single date (thread-safe)."""
+        current_dt, trade_date_str = date_tuple
+        result = {'success': False, 'records': 0, 'date': trade_date_str, 'error': None}
+        
+        try:
+            # Create thread-local NSE instance
+            nse = NseUtils()
+            
+            # Download data
+            df = nse.bhav_copy_with_delivery(trade_date_str)
+            
+            if not df.empty:
+                # Clean problematic data
+                df['DELIV_QTY'] = df['DELIV_QTY'].replace(['-', ' -', '- '], '0')
+                df['DELIV_QTY'] = pd.to_numeric(df['DELIV_QTY'], errors='coerce').fillna(0).astype(int)
+                df['DELIV_PER'] = df['DELIV_PER'].replace(['-', ' -', '- '], '0')
+                df['DELIV_PER'] = pd.to_numeric(df['DELIV_PER'], errors='coerce').fillna(0)
+                
+                # Add trade date and timestamp
+                df['TRADE_DATE'] = current_dt.date()
+                df['last_updated'] = datetime.now().isoformat()
+                
+                # Thread-safe database operations
+                with self.db_lock:
+                    self.conn.execute("DELETE FROM equity_bhav_copy_delivery WHERE TRADE_DATE = ?", [current_dt.date()])
+                    self.conn.execute("INSERT INTO equity_bhav_copy_delivery SELECT * FROM df")
+                
+                result['success'] = True
+                result['records'] = len(df)
+                logger.info(f"SUCCESS: Equity Bhav Copy for {trade_date_str}: {len(df)} records")
+            
+            time.sleep(self.delay_between_requests)
+            
+        except Exception as e:
+            result['error'] = str(e)
+            logger.error(f"FAILED: Equity Bhav Copy for {trade_date_str}: {e}")
+        
+        return result
+
+    def _download_single_date_indices(self, date_tuple: Tuple[datetime, str]) -> Dict[str, Any]:
+        """Download Indices data for a single date (thread-safe)."""
+        current_dt, trade_date_str = date_tuple
+        result = {'success': False, 'records': 0, 'date': trade_date_str, 'error': None}
+        
+        try:
+            # Create thread-local NSE instance
+            nse = NseUtils()
+            
+            # Download data
+            df = nse.bhav_copy_indices(trade_date_str)
+            
+            if not df.empty:
+                # Clean problematic data
+                numeric_columns = ['Open Index Value', 'High Index Value', 'Low Index Value', 
+                                 'Closing Index Value', 'Points Change', 'Change(%)', 'Volume', 
+                                 'Turnover (Rs. Cr.)', 'P/E', 'P/B', 'Div Yield']
+                
+                for col in numeric_columns:
+                    if col in df.columns:
+                        df[col] = df[col].replace(['-', ' -', '- '], '0')
+                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                
+                # Add trade date and timestamp
+                df['TRADE_DATE'] = current_dt.date()
+                df['last_updated'] = datetime.now().isoformat()
+                
+                # Thread-safe database operations
+                with self.db_lock:
+                    self.conn.execute("DELETE FROM bhav_copy_indices WHERE TRADE_DATE = ?", [current_dt.date()])
+                    self.conn.execute("INSERT INTO bhav_copy_indices SELECT * FROM df")
+                
+                result['success'] = True
+                result['records'] = len(df)
+                logger.info(f"SUCCESS: Bhav Copy Indices for {trade_date_str}: {len(df)} records")
+            
+            time.sleep(self.delay_between_requests)
+            
+        except Exception as e:
+            result['error'] = str(e)
+            logger.error(f"FAILED: Bhav Copy Indices for {trade_date_str}: {e}")
+        
+        return result
+
+    def download_fno_bhav_copy_threaded(self, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Download FNO Bhav Copy data using threading for better performance."""
+        logger.info(f"Downloading FNO Bhav Copy (THREADED) from {start_date} to {end_date}")
+        
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        # Generate all trading dates
+        trading_dates = []
+        current_dt = start_dt
+        while current_dt <= end_dt:
+            if current_dt.weekday() < 5:  # Skip weekends
+                trade_date_str = current_dt.strftime('%d-%m-%Y')
+                trading_dates.append((current_dt, trade_date_str))
+            current_dt += timedelta(days=1)
+        
+        logger.info(f"Total trading days to download: {len(trading_dates)}")
+        
+        total_records = 0
+        successful_dates = 0
+        failed_dates = 0
+        
+        # Use ThreadPoolExecutor for parallel downloads
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all download tasks
+            future_to_date = {executor.submit(self._download_single_date_fno, date_tuple): date_tuple 
+                            for date_tuple in trading_dates}
+            
+            # Process completed tasks
+            for future in as_completed(future_to_date):
+                result = future.result()
+                if result['success']:
+                    total_records += result['records']
+                    successful_dates += 1
+                    
+                    # Update progress
+                    self.progress['fno_bhav_copy']['last_date'] = result['date']
+                    self.progress['fno_bhav_copy']['total_downloads'] += 1
+                else:
+                    failed_dates += 1
+                
+                # Save progress periodically
+                if (successful_dates + failed_dates) % 10 == 0:
+                    self._save_progress()
+        
+        self._save_progress()
+        
+        return {
+            'success': True,
+            'total_records': total_records,
+            'successful_dates': successful_dates,
+            'failed_dates': failed_dates
+        }
+
+    def download_equity_bhav_copy_delivery_threaded(self, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Download Equity Bhav Copy with Delivery data using threading."""
+        logger.info(f"Downloading Equity Bhav Copy with Delivery (THREADED) from {start_date} to {end_date}")
+        
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        # Generate all trading dates
+        trading_dates = []
+        current_dt = start_dt
+        while current_dt <= end_dt:
+            if current_dt.weekday() < 5:  # Skip weekends
+                trade_date_str = current_dt.strftime('%d-%m-%Y')
+                trading_dates.append((current_dt, trade_date_str))
+            current_dt += timedelta(days=1)
+        
+        logger.info(f"Total trading days to download: {len(trading_dates)}")
+        
+        total_records = 0
+        successful_dates = 0
+        failed_dates = 0
+        
+        # Use ThreadPoolExecutor for parallel downloads
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all download tasks
+            future_to_date = {executor.submit(self._download_single_date_equity, date_tuple): date_tuple 
+                            for date_tuple in trading_dates}
+            
+            # Process completed tasks
+            for future in as_completed(future_to_date):
+                result = future.result()
+                if result['success']:
+                    total_records += result['records']
+                    successful_dates += 1
+                    
+                    # Update progress
+                    self.progress['equity_bhav_copy_delivery']['last_date'] = result['date']
+                    self.progress['equity_bhav_copy_delivery']['total_downloads'] += 1
+                else:
+                    failed_dates += 1
+                
+                # Save progress periodically
+                if (successful_dates + failed_dates) % 10 == 0:
+                    self._save_progress()
+        
+        self._save_progress()
+        
+        return {
+            'success': True,
+            'total_records': total_records,
+            'successful_dates': successful_dates,
+            'failed_dates': failed_dates
+        }
+
+    def download_bhav_copy_indices_threaded(self, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Download Bhav Copy Indices data using threading."""
+        logger.info(f"Downloading Bhav Copy Indices (THREADED) from {start_date} to {end_date}")
+        
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        # Generate all trading dates
+        trading_dates = []
+        current_dt = start_dt
+        while current_dt <= end_dt:
+            if current_dt.weekday() < 5:  # Skip weekends
+                trade_date_str = current_dt.strftime('%d-%m-%Y')
+                trading_dates.append((current_dt, trade_date_str))
+            current_dt += timedelta(days=1)
+        
+        logger.info(f"Total trading days to download: {len(trading_dates)}")
+        
+        total_records = 0
+        successful_dates = 0
+        failed_dates = 0
+        
+        # Use ThreadPoolExecutor for parallel downloads
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all download tasks
+            future_to_date = {executor.submit(self._download_single_date_indices, date_tuple): date_tuple 
+                            for date_tuple in trading_dates}
+            
+            # Process completed tasks
+            for future in as_completed(future_to_date):
+                result = future.result()
+                if result['success']:
+                    total_records += result['records']
+                    successful_dates += 1
+                    
+                    # Update progress
+                    self.progress['bhav_copy_indices']['last_date'] = result['date']
+                    self.progress['bhav_copy_indices']['total_downloads'] += 1
+                else:
+                    failed_dates += 1
+                
+                # Save progress periodically
+                if (successful_dates + failed_dates) % 10 == 0:
+                    self._save_progress()
+        
+        self._save_progress()
+        
+        return {
+            'success': True,
+            'total_records': total_records,
+            'successful_dates': successful_dates,
+            'failed_dates': failed_dates
+        }
+
+    def download_all_eod_data_threaded(self, years: int = 5) -> Dict[str, Any]:
+        """Download all EOD extra data using threading for maximum performance."""
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        start_date = (datetime.now() - timedelta(days=years*365)).strftime('%Y-%m-%d')
+        
+        logger.info(f"Starting THREADED EOD extra data download for {years} years")
+        logger.info(f"Date range: {start_date} to {end_date}")
+        logger.info(f"Using {self.max_workers} threads for parallel downloads")
+        
+        start_time = time.time()
+        results = {}
+        
+        # Download FNO Bhav Copy (Threaded)
+        logger.info("=" * 60)
+        logger.info("DOWNLOADING FNO BHAV COPY (THREADED)")
+        logger.info("=" * 60)
+        results['fno_bhav_copy'] = self.download_fno_bhav_copy_threaded(start_date, end_date)
+        
+        # Download Equity Bhav Copy with Delivery (Threaded)
+        logger.info("=" * 60)
+        logger.info("DOWNLOADING EQUITY BHAV COPY WITH DELIVERY (THREADED)")
+        logger.info("=" * 60)
+        results['equity_bhav_copy_delivery'] = self.download_equity_bhav_copy_delivery_threaded(start_date, end_date)
+        
+        # Download Bhav Copy Indices (Threaded)
+        logger.info("=" * 60)
+        logger.info("DOWNLOADING BHAV COPY INDICES (THREADED)")
+        logger.info("=" * 60)
+        results['bhav_copy_indices'] = self.download_bhav_copy_indices_threaded(start_date, end_date)
+        
+        # Download FII DII Activity (Single download - no threading needed)
+        logger.info("=" * 60)
+        logger.info("DOWNLOADING FII DII ACTIVITY")
+        logger.info("=" * 60)
+        results['fii_dii_activity'] = self.download_fii_dii_activity(start_date, end_date)
+        
+        # Calculate total time
+        total_time = time.time() - start_time
+        
+        # Generate summary
+        total_records = sum(r['total_records'] for r in results.values())
+        total_successful = sum(r['successful_dates'] for r in results.values())
+        total_failed = sum(r['failed_dates'] for r in results.values())
+        
+        summary = {
+            'total_records': total_records,
+            'total_successful_dates': total_successful,
+            'total_failed_dates': total_failed,
+            'total_time_seconds': total_time,
+            'total_time_minutes': total_time / 60,
+            'total_time_hours': total_time / 3600,
+            'records_per_second': total_records / total_time if total_time > 0 else 0,
+            'detailed_results': results
+        }
+        
+        logger.info("=" * 60)
+        logger.info("THREADED EOD EXTRA DATA DOWNLOAD SUMMARY")
+        logger.info("=" * 60)
+        logger.info(f"Total Records Downloaded: {total_records:,}")
+        logger.info(f"Total Successful Dates: {total_successful}")
+        logger.info(f"Total Failed Dates: {total_failed}")
+        logger.info(f"Total Time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+        logger.info(f"Records per Second: {total_records/total_time:.2f}")
+        logger.info(f"Threads Used: {self.max_workers}")
+        
+        return summary
+
+    # Keep original methods for backward compatibility
     def download_fno_bhav_copy(self, start_date: str, end_date: str) -> Dict[str, Any]:
-        """Download FNO Bhav Copy data for date range."""
+        """Download FNO Bhav Copy data for date range (original method)."""
         logger.info(f"Downloading FNO Bhav Copy from {start_date} to {end_date}")
         
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -206,7 +582,7 @@ class EODExtraDataDownloader:
                     total_records += records_added
                     successful_dates += 1
                     
-                    logger.info(f"✅ FNO Bhav Copy for {trade_date_str}: {records_added} records")
+                    logger.info(f"SUCCESS: FNO Bhav Copy for {trade_date_str}: {records_added} records")
                     
                     # Update progress
                     self.progress['fno_bhav_copy']['last_date'] = trade_date_str
@@ -217,7 +593,7 @@ class EODExtraDataDownloader:
                 
             except Exception as e:
                 failed_dates += 1
-                logger.error(f"❌ Failed to download FNO Bhav Copy for {trade_date_str}: {e}")
+                logger.error(f"FAILED: Failed to download FNO Bhav Copy for {trade_date_str}: {e}")
             
             current_dt += timedelta(days=1)
         
@@ -229,7 +605,7 @@ class EODExtraDataDownloader:
         }
     
     def download_equity_bhav_copy_delivery(self, start_date: str, end_date: str) -> Dict[str, Any]:
-        """Download Equity Bhav Copy with Delivery data for date range."""
+        """Download Equity Bhav Copy with Delivery data for date range (original method)."""
         logger.info(f"Downloading Equity Bhav Copy with Delivery from {start_date} to {end_date}")
         
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -254,6 +630,12 @@ class EODExtraDataDownloader:
                 df = self.nse.bhav_copy_with_delivery(trade_date_str)
                 
                 if not df.empty:
+                    # Clean problematic data
+                    df['DELIV_QTY'] = df['DELIV_QTY'].replace(['-', ' -', '- '], '0')
+                    df['DELIV_QTY'] = pd.to_numeric(df['DELIV_QTY'], errors='coerce').fillna(0).astype(int)
+                    df['DELIV_PER'] = df['DELIV_PER'].replace(['-', ' -', '- '], '0')
+                    df['DELIV_PER'] = pd.to_numeric(df['DELIV_PER'], errors='coerce').fillna(0)
+                    
                     # Add trade date and timestamp
                     df['TRADE_DATE'] = current_dt.date()
                     df['last_updated'] = datetime.now().isoformat()
@@ -266,7 +648,7 @@ class EODExtraDataDownloader:
                     total_records += records_added
                     successful_dates += 1
                     
-                    logger.info(f"✅ Equity Bhav Copy with Delivery for {trade_date_str}: {records_added} records")
+                    logger.info(f"SUCCESS: Equity Bhav Copy with Delivery for {trade_date_str}: {records_added} records")
                     
                     # Update progress
                     self.progress['equity_bhav_copy_delivery']['last_date'] = trade_date_str
@@ -277,7 +659,7 @@ class EODExtraDataDownloader:
                 
             except Exception as e:
                 failed_dates += 1
-                logger.error(f"❌ Failed to download Equity Bhav Copy with Delivery for {trade_date_str}: {e}")
+                logger.error(f"FAILED: Failed to download Equity Bhav Copy with Delivery for {trade_date_str}: {e}")
             
             current_dt += timedelta(days=1)
         
@@ -289,7 +671,7 @@ class EODExtraDataDownloader:
         }
     
     def download_bhav_copy_indices(self, start_date: str, end_date: str) -> Dict[str, Any]:
-        """Download Bhav Copy Indices data for date range."""
+        """Download Bhav Copy Indices data for date range (original method)."""
         logger.info(f"Downloading Bhav Copy Indices from {start_date} to {end_date}")
         
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -314,6 +696,15 @@ class EODExtraDataDownloader:
                 df = self.nse.bhav_copy_indices(trade_date_str)
                 
                 if not df.empty:
+                    # Clean problematic data - replace '-' with 0 for numeric columns
+                    numeric_columns = ['Open Index Value', 'High Index Value', 'Low Index Value', 
+                                     'Closing Index Value', 'Points Change', 'Change(%)', 'Volume', 'Turnover (Rs. Cr.)', 'P/E', 'P/B', 'Div Yield']
+                    
+                    for col in numeric_columns:
+                        if col in df.columns:
+                            df[col] = df[col].replace(['-', ' -', '- '], '0')
+                            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                    
                     # Add trade date and timestamp
                     df['TRADE_DATE'] = current_dt.date()
                     df['last_updated'] = datetime.now().isoformat()
@@ -326,7 +717,7 @@ class EODExtraDataDownloader:
                     total_records += records_added
                     successful_dates += 1
                     
-                    logger.info(f"✅ Bhav Copy Indices for {trade_date_str}: {records_added} records")
+                    logger.info(f"SUCCESS: Bhav Copy Indices for {trade_date_str}: {records_added} records")
                     
                     # Update progress
                     self.progress['bhav_copy_indices']['last_date'] = trade_date_str
@@ -337,7 +728,7 @@ class EODExtraDataDownloader:
                 
             except Exception as e:
                 failed_dates += 1
-                logger.error(f"❌ Failed to download Bhav Copy Indices for {trade_date_str}: {e}")
+                logger.error(f"FAILED: Failed to download Bhav Copy Indices for {trade_date_str}: {e}")
             
             current_dt += timedelta(days=1)
         
@@ -352,54 +743,41 @@ class EODExtraDataDownloader:
         """Download FII DII Activity data for date range."""
         logger.info(f"Downloading FII DII Activity from {start_date} to {end_date}")
         
-        # FII DII activity is typically daily data, so we'll download for each trading day
-        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-        current_dt = start_dt
-        
+        # FII DII activity is typically daily data, but NSE only provides current day data
+        # So we'll download once and store it for the current date
         total_records = 0
         successful_dates = 0
         failed_dates = 0
         
-        while current_dt <= end_dt:
-            try:
-                # Skip weekends
-                if current_dt.weekday() >= 5:
-                    current_dt += timedelta(days=1)
-                    continue
-                
-                logger.info(f"Downloading FII DII Activity for {current_dt.strftime('%Y-%m-%d')}")
-                
-                # Download data
-                df = self.nse.fii_dii_activity()
-                
-                if not df.empty:
-                    # Add activity date and timestamp
-                    df['activity_date'] = current_dt.date()
-                    df['last_updated'] = datetime.now().isoformat()
-                    
-                    # Store in database
-                    self.conn.execute("DELETE FROM fii_dii_activity WHERE activity_date = ?", [current_dt.date()])
-                    self.conn.execute("INSERT INTO fii_dii_activity SELECT * FROM df")
-                    
-                    records_added = len(df)
-                    total_records += records_added
-                    successful_dates += 1
-                    
-                    logger.info(f"✅ FII DII Activity for {current_dt.strftime('%Y-%m-%d')}: {records_added} records")
-                    
-                    # Update progress
-                    self.progress['fii_dii_activity']['last_date'] = current_dt.strftime('%Y-%m-%d')
-                    self.progress['fii_dii_activity']['total_downloads'] += 1
-                    self._save_progress()
-                
-                time.sleep(self.delay_between_requests)
-                
-            except Exception as e:
-                failed_dates += 1
-                logger.error(f"❌ Failed to download FII DII Activity for {current_dt.strftime('%Y-%m-%d')}: {e}")
+        try:
+            logger.info(f"Downloading FII DII Activity for current date")
             
-            current_dt += timedelta(days=1)
+            # Download data
+            df = self.nse.fii_dii_activity()
+            
+            if not df.empty:
+                # Add trade date and timestamp
+                df['TRADE_DATE'] = datetime.now().date()
+                df['last_updated'] = datetime.now().isoformat()
+                
+                # Store in database - clear existing data first
+                self.conn.execute("DELETE FROM fii_dii_activity")
+                self.conn.execute("INSERT INTO fii_dii_activity SELECT * FROM df")
+                
+                records_added = len(df)
+                total_records = records_added
+                successful_dates = 1
+                
+                logger.info(f"SUCCESS: FII DII Activity for current date: {records_added} records")
+                
+                # Update progress
+                self.progress['fii_dii_activity']['last_date'] = datetime.now().strftime('%Y-%m-%d')
+                self.progress['fii_dii_activity']['total_downloads'] += 1
+                self._save_progress()
+            
+        except Exception as e:
+            failed_dates = 1
+            logger.error(f"FAILED: Failed to download FII DII Activity: {e}")
         
         return {
             'success': True,
@@ -409,7 +787,7 @@ class EODExtraDataDownloader:
         }
     
     def download_all_eod_data(self, years: int = 5) -> Dict[str, Any]:
-        """Download all EOD extra data for specified number of years."""
+        """Download all EOD extra data for specified number of years (original method)."""
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=years*365)).strftime('%Y-%m-%d')
         
@@ -519,9 +897,9 @@ class EODExtraDataDownloader:
             # FII DII Activity stats
             fii_stats = self.conn.execute("""
                 SELECT COUNT(*) as total_records,
-                       COUNT(DISTINCT activity_date) as unique_dates,
-                       MIN(activity_date) as earliest_date,
-                       MAX(activity_date) as latest_date
+                       COUNT(DISTINCT TRADE_DATE) as unique_dates,
+                       MIN(TRADE_DATE) as earliest_date,
+                       MAX(TRADE_DATE) as latest_date
                 FROM fii_dii_activity
             """).fetchone()
             
@@ -548,7 +926,7 @@ class EODExtraDataDownloader:
             logger.info(f"{data_type.upper()}:")
             logger.info(f"  Last Date: {progress['last_date'] or 'None'}")
             logger.info(f"  Total Downloads: {progress['total_downloads']}")
-            logger.info()
+            logger.info("")
 
 
 def main():
@@ -582,12 +960,12 @@ def main():
         except ValueError:
             print(f"Invalid number: {sys.argv[1]}. Using default: 5 years")
     
-    print(f"Starting EOD extra data download for {years} years...")
-    print(f"This will download data for all four data types.")
+    print(f"Starting THREADED EOD extra data download for {years} years...")
+    print(f"This will download data for all four data types using {downloader.max_workers} threads.")
     print(f"Using DuckDB for faster processing...")
     
-    # Start download
-    results = downloader.download_all_eod_data(years)
+    # Start threaded download
+    results = downloader.download_all_eod_data_threaded(years)
     
     # Show final stats
     print(f"FINAL DATABASE STATS:")
@@ -601,7 +979,9 @@ def main():
                 print(f"  Date Range: {data_stats['earliest_date']} to {data_stats['latest_date']}")
             print()
     
-    print(f"EOD EXTRA DATA DOWNLOAD COMPLETED!")
+    print(f"THREADED EOD EXTRA DATA DOWNLOAD COMPLETED!")
+    print(f"Total Time: {results['total_time_minutes']:.2f} minutes")
+    print(f"Records per Second: {results['records_per_second']:.2f}")
 
 
 if __name__ == "__main__":
