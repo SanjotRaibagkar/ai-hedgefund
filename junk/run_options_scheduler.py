@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Run Options Scheduler
-Simple script to run options analysis every 15 minutes using unified EnhancedOptionsAnalyzer.
+Simple script to run options analysis every 15 minutes using fixed FixedEnhancedOptionsAnalyzer.
 """
 
 import sys
@@ -13,15 +13,15 @@ import schedule
 from datetime import datetime
 from loguru import logger
 
-from src.screening.enhanced_options_analyzer import EnhancedOptionsAnalyzer
+from src.screening.fixed_enhanced_options_analyzer import FixedEnhancedOptionsAnalyzer
 
 def run_options_analysis(index: str = 'NIFTY'):
     """Run options analysis for given index using unified analyzer."""
     logger.info(f"🎯 Running {index} options analysis at {datetime.now().strftime('%H:%M:%S')}")
     
     try:
-        # Use unified options analyzer
-        analyzer = EnhancedOptionsAnalyzer()
+        # Use fixed enhanced options analyzer
+        analyzer = FixedEnhancedOptionsAnalyzer()
         
         # Run analysis and save to CSV with performance tracking
         success = analyzer.run_analysis_and_save(index)

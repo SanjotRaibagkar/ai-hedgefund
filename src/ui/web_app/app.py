@@ -325,7 +325,7 @@ def run_options_analysis(n_clicks):
         import os
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
         
-        from src.screening.enhanced_options_analyzer import get_latest_analysis
+        from src.screening.fixed_enhanced_options_analyzer import get_latest_analysis
         
         content = [
             html.H5("🎯 Options Analysis Results"),
