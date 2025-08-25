@@ -34,22 +34,16 @@ class OptionsAnalyzer:
         self.logger.info(f"Analyzing {index} options")
         
         try:
-            # Get current index price
-            index_ticker = f"{index}.NS"
-            current_data = get_prices(index_ticker, 
-                                    (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d'),
-                                    datetime.now().strftime('%Y-%m-%d'))
-            
-            if current_data is None or current_data.empty:
-                self.logger.error(f"Could not fetch {index} data")
-                return {}
-            
-            current_price = current_data['close_price'].iloc[-1]
-            
-            # Get options chain
-            options_data = get_option_chain(index_ticker)
+            # Get options chain (this includes spot price)
+            options_data = get_option_chain(index)
             if not options_data:
                 self.logger.error(f"Could not fetch {index} options data")
+                return {}
+            
+            # Use spot price from options data instead of historical data
+            current_price = options_data.get('spot_price', 0)
+            if current_price == 0:
+                self.logger.error(f"Could not get spot price for {index}")
                 return {}
             
             # Analyze options
@@ -80,22 +74,22 @@ class OptionsAnalyzer:
     def _analyze_oi_patterns(self, options_data: Dict, current_price: float) -> Dict[str, Any]:
         """Analyze Open Interest patterns."""
         try:
-            calls_data = options_data.get('calls', [])
-            puts_data = options_data.get('puts', [])
+            calls_data = options_data.get('call_options', [])
+            puts_data = options_data.get('put_options', [])
             
             # Calculate PCR (Put-Call Ratio)
-            total_call_oi = sum(call.get('openInterest', 0) for call in calls_data)
-            total_put_oi = sum(put.get('openInterest', 0) for put in puts_data)
+            total_call_oi = sum(call.get('open_interest', 0) for call in calls_data)
+            total_put_oi = sum(put.get('open_interest', 0) for put in puts_data)
             pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
             
             # Find max OI strikes
-            max_call_oi_strike = max(calls_data, key=lambda x: x.get('openInterest', 0)) if calls_data else None
-            max_put_oi_strike = max(puts_data, key=lambda x: x.get('openInterest', 0)) if puts_data else None
+            max_call_oi_strike = max(calls_data, key=lambda x: x.get('open_interest', 0)) if calls_data else None
+            max_put_oi_strike = max(puts_data, key=lambda x: x.get('open_interest', 0)) if puts_data else None
             
             return {
                 'put_call_ratio': pcr,
-                'max_call_oi_strike': max_call_oi_strike.get('strikePrice', 0) if max_call_oi_strike else 0,
-                'max_put_oi_strike': max_put_oi_strike.get('strikePrice', 0) if max_put_oi_strike else 0,
+                'max_call_oi_strike': max_call_oi_strike.get('strike_price', 0) if max_call_oi_strike else 0,
+                'max_put_oi_strike': max_put_oi_strike.get('strike_price', 0) if max_put_oi_strike else 0,
                 'interpretation': self._interpret_pcr(pcr)
             }
             
@@ -106,12 +100,12 @@ class OptionsAnalyzer:
     def _analyze_volatility(self, options_data: Dict, current_price: float) -> Dict[str, Any]:
         """Analyze volatility patterns."""
         try:
-            calls_data = options_data.get('calls', [])
-            puts_data = options_data.get('puts', [])
+            calls_data = options_data.get('call_options', [])
+            puts_data = options_data.get('put_options', [])
             
             # Calculate average IV
-            call_ivs = [call.get('impliedVolatility', 0) for call in calls_data if call.get('impliedVolatility', 0) > 0]
-            put_ivs = [put.get('impliedVolatility', 0) for put in puts_data if put.get('impliedVolatility', 0) > 0]
+            call_ivs = [call.get('implied_volatility', 0) for call in calls_data if call.get('implied_volatility', 0) > 0]
+            put_ivs = [put.get('implied_volatility', 0) for put in puts_data if put.get('implied_volatility', 0) > 0]
             
             avg_call_iv = np.mean(call_ivs) if call_ivs else 0
             avg_put_iv = np.mean(put_ivs) if put_ivs else 0
@@ -130,8 +124,8 @@ class OptionsAnalyzer:
     def _get_strike_recommendations(self, options_data: Dict, current_price: float) -> Dict[str, Any]:
         """Get strike selection recommendations."""
         try:
-            calls_data = options_data.get('calls', [])
-            puts_data = options_data.get('puts', [])
+            calls_data = options_data.get('call_options', [])
+            puts_data = options_data.get('put_options', [])
             
             recommendations = {
                 'high_iv_strikes': self._find_high_iv_strikes(calls_data, puts_data),
@@ -148,8 +142,8 @@ class OptionsAnalyzer:
     def _analyze_market_sentiment(self, options_data: Dict, current_price: float) -> Dict[str, Any]:
         """Analyze market sentiment from options data."""
         try:
-            calls_data = options_data.get('calls', [])
-            puts_data = options_data.get('puts', [])
+            calls_data = options_data.get('call_options', [])
+            puts_data = options_data.get('put_options', [])
             
             sentiment = {
                 'pcr_sentiment': self._pcr_sentiment_analysis(calls_data, puts_data),
@@ -194,13 +188,13 @@ class OptionsAnalyzer:
         """Find strikes with high implied volatility."""
         try:
             all_options = calls_data + puts_data
-            high_iv_options = sorted(all_options, key=lambda x: x.get('impliedVolatility', 0), reverse=True)[:5]
+            high_iv_options = sorted(all_options, key=lambda x: x.get('implied_volatility', 0), reverse=True)[:5]
             
             return [{
-                'strike': opt.get('strikePrice'),
+                'strike': opt.get('strike_price'),
                 'type': 'call' if opt in calls_data else 'put',
-                'iv': opt.get('impliedVolatility'),
-                'oi': opt.get('openInterest')
+                'iv': opt.get('implied_volatility'),
+                'oi': opt.get('open_interest')
             } for opt in high_iv_options]
             
         except Exception as e:
@@ -211,13 +205,13 @@ class OptionsAnalyzer:
         """Find strikes with low implied volatility."""
         try:
             all_options = calls_data + puts_data
-            low_iv_options = sorted(all_options, key=lambda x: x.get('impliedVolatility', 0))[:5]
+            low_iv_options = sorted(all_options, key=lambda x: x.get('implied_volatility', 0))[:5]
             
             return [{
-                'strike': opt.get('strikePrice'),
+                'strike': opt.get('strike_price'),
                 'type': 'call' if opt in calls_data else 'put',
-                'iv': opt.get('impliedVolatility'),
-                'oi': opt.get('openInterest')
+                'iv': opt.get('implied_volatility'),
+                'oi': opt.get('open_interest')
             } for opt in low_iv_options]
             
         except Exception as e:
@@ -230,14 +224,14 @@ class OptionsAnalyzer:
             atm_strikes = []
             
             for call in calls_data:
-                strike = call.get('strikePrice', 0)
+                strike = call.get('strike_price', 0)
                 if 0.98 * current_price <= strike <= 1.02 * current_price:
                     atm_strikes.append({
                         'strike': strike,
                         'type': 'call',
-                        'iv': call.get('impliedVolatility'),
-                        'oi': call.get('openInterest'),
-                        'premium': call.get('lastPrice')
+                        'iv': call.get('implied_volatility'),
+                        'oi': call.get('open_interest'),
+                        'premium': call.get('last_price')
                     })
             
             return sorted(atm_strikes, key=lambda x: abs(x['strike'] - current_price))[:3]
@@ -249,8 +243,8 @@ class OptionsAnalyzer:
     def _pcr_sentiment_analysis(self, calls_data: List, puts_data: List) -> str:
         """Analyze sentiment based on PCR."""
         try:
-            total_call_oi = sum(call.get('openInterest', 0) for call in calls_data)
-            total_put_oi = sum(put.get('openInterest', 0) for put in puts_data)
+            total_call_oi = sum(call.get('open_interest', 0) for call in calls_data)
+            total_put_oi = sum(put.get('open_interest', 0) for put in puts_data)
             pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
             
             if pcr > 1.2:
@@ -267,8 +261,8 @@ class OptionsAnalyzer:
     def _iv_sentiment_analysis(self, calls_data: List, puts_data: List) -> str:
         """Analyze sentiment based on IV."""
         try:
-            call_ivs = [call.get('impliedVolatility', 0) for call in calls_data if call.get('impliedVolatility', 0) > 0]
-            put_ivs = [put.get('impliedVolatility', 0) for put in puts_data if put.get('impliedVolatility', 0) > 0]
+            call_ivs = [call.get('implied_volatility', 0) for call in calls_data if call.get('implied_volatility', 0) > 0]
+            put_ivs = [put.get('implied_volatility', 0) for put in puts_data if put.get('implied_volatility', 0) > 0]
             
             avg_call_iv = np.mean(call_ivs) if call_ivs else 0
             avg_put_iv = np.mean(put_ivs) if put_ivs else 0

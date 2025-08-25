@@ -399,28 +399,20 @@ def run_market_predictions(n_clicks):
         return "Click 'Run Market Predictions' to start..."
     
     try:
-        # Import options ML integration
+        # Import enhanced options ML integration
         import sys
         import os
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
         
-        from src.ml.options_ml_integration import OptionsMLIntegration
+        from src.ml.enhanced_options_ml_integration import EnhancedOptionsMLIntegration
         
-        # Initialize options ML integration
-        options_ml = OptionsMLIntegration()
+        # Initialize enhanced options ML integration
+        options_ml = EnhancedOptionsMLIntegration()
         
         # Get options signals
         options_signals = options_ml.get_options_signals(['NIFTY', 'BANKNIFTY'])
         
-        # Create sample base features (in real implementation, this would come from ML model)
-        base_features = pd.DataFrame({
-            'technical_score': [0.6, 0.4, 0.8],
-            'fundamental_score': [0.7, 0.5, 0.9],
-            'momentum_score': [0.5, 0.3, 0.7]
-        })
-        
-        # Sample base predictions (in real implementation, this would come from ML model)
-        base_predictions = [0.15, -0.08, 0.25]
+        # Enhanced ML integration now uses real models instead of sample data
         
         content = [
             html.H5("🔮 ML + Options Market Predictions"),
@@ -428,36 +420,49 @@ def run_market_predictions(n_clicks):
         ]
         
         if options_signals:
-            # Get market sentiment
-            sentiment_score = options_ml.get_market_sentiment_score(options_signals)
-            
+            # Get enhanced market sentiment
+            sentiment_analysis = options_ml.get_enhanced_market_sentiment_score(options_signals)
+        
+        content.extend([
+            html.H6("📊 Enhanced Market Sentiment Analysis:"),
+            html.P(f"Overall Sentiment Score: {sentiment_analysis.get('sentiment_score', sentiment_analysis.get('overall_score', 0)):.3f}"),
+            html.P(f"Sentiment: {'🟢 Bullish' if sentiment_analysis.get('sentiment', 'NEUTRAL') == 'BULLISH' else '🔴 Bearish' if sentiment_analysis.get('sentiment', 'NEUTRAL') == 'BEARISH' else '🟡 Neutral'}"),
+            html.P(f"Confidence: {sentiment_analysis.get('confidence', 50):.1f}%"),
+        ])
+        
+        # Show conflicts if any
+        if sentiment_analysis['conflicts']:
             content.extend([
-                html.H6("📊 Market Sentiment Analysis:"),
-                html.P(f"Overall Sentiment Score: {sentiment_score:.3f}"),
-                html.P(f"Sentiment: {'🟢 Bullish' if sentiment_score > 0.1 else '🔴 Bearish' if sentiment_score < -0.1 else '🟡 Neutral'}"),
-                html.Hr()
+                html.P("⚠️ Conflicts Detected:", className="text-warning"),
+                html.Ul([html.Li(conflict) for conflict in sentiment_analysis['conflicts']]),
             ])
-            
-            # Show options signals
-            content.append(html.H6("🎯 Options Signals:"))
-            for index, signal in options_signals.items():
-                content.extend([
-                    html.P(f"{index}: {signal['signal']} ({signal['confidence']:.1f}% confidence)"),
-                    html.P(f"PCR: {signal['pcr']:.2f} | Signal Strength: {signal['signal_strength']:.3f}"),
-                    html.Br()
-                ])
-            
-            # Show ML + Options recommendations
-            content.append(html.H6("🤖 ML + Options Recommendations:"))
-            for i, base_pred in enumerate(base_predictions):
-                adjusted_pred = options_ml.adjust_ml_prediction(base_pred, options_signals)
-                recommendation = options_ml._generate_recommendation(adjusted_pred, sentiment_score, options_signals)
-                
-                content.extend([
-                    html.P(f"Model {i+1}: Base: {base_pred:.3f} → Adjusted: {adjusted_pred:.3f}"),
-                    html.P(f"Recommendation: {recommendation}"),
-                    html.Br()
-                ])
+        
+        content.append(html.Hr())
+        
+        # Show enhanced options signals with ML predictions
+        content.append(html.H6("🎯 Enhanced Options + ML Signals:"))
+        for index, signal in options_signals.items():
+            ml_pred = signal.get('ml_prediction', {})
+            content.extend([
+                html.P(f"{index}: {signal['signal']} ({signal['confidence']:.1f}% confidence)"),
+                html.P(f"PCR: {signal['pcr']:.2f} | Signal Strength: {signal['signal_strength']:.3f}"),
+                html.P(f"ML Prediction: {ml_pred.get('direction', 'N/A')} ({ml_pred.get('confidence', 0):.1f}% confidence)"),
+                html.P(f"ML Model: {ml_pred.get('model_type', 'N/A')} | Prediction: {ml_pred.get('prediction', 0):.4f}"),
+                html.Br()
+            ])
+        
+        # Get enhanced recommendations
+        enhanced_recommendations = options_ml.get_enhanced_recommendations(options_signals)
+        
+        # Show enhanced recommendations
+        content.append(html.H6("🤖 Enhanced ML + Options Recommendations:"))
+        for rec in enhanced_recommendations.get('recommendations', []):
+            content.extend([
+                html.P(f"{rec['index']}: {rec['recommendation']} ({rec['confidence']:.1f}% confidence)"),
+                html.P(f"Reason: {rec['reason']}"),
+                html.P(f"Options Signal: {rec['options_signal']} | ML Direction: {rec['ml_direction']}"),
+                html.Br()
+            ])
         else:
             content.extend([
                 html.Div([
