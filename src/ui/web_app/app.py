@@ -70,7 +70,7 @@ app.layout = dbc.Container([
                                 value="RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, ICICIBANK.NS",
                                 style={'width': '100%', 'height': 60}
                             )
-                        ], width=6),
+                        ], width=4),
                         dbc.Col([
                             html.Label("Risk-Reward Ratio:"),
                             dcc.Slider(
@@ -81,7 +81,20 @@ app.layout = dbc.Container([
                                 value=2.0,
                                 marks={i: str(i) for i in range(1, 6)}
                             )
-                        ], width=6)
+                        ], width=4),
+                        dbc.Col([
+                            html.Label("Analysis Mode:"),
+                            dcc.Dropdown(
+                                id="analysis-mode",
+                                options=[
+                                    {'label': 'Basic', 'value': 'basic'},
+                                    {'label': 'Enhanced', 'value': 'enhanced'},
+                                    {'label': 'Comprehensive', 'value': 'comprehensive'}
+                                ],
+                                value='comprehensive',
+                                style={'width': '100%'}
+                            )
+                        ], width=4)
                     ])
                 ])
             ])
@@ -160,9 +173,10 @@ app.layout = dbc.Container([
     Input("btn-eod", "n_clicks"),
     Input("stock-list", "value"),
     Input("risk-reward-slider", "value"),
+    Input("analysis-mode", "value"),
     prevent_initial_call=True
 )
-def run_eod_screening(n_clicks, stock_list, risk_reward):
+def run_eod_screening(n_clicks, stock_list, risk_reward, analysis_mode):
     if n_clicks is None:
         return "Click 'Run EOD Screening' to start..."
     
@@ -170,8 +184,8 @@ def run_eod_screening(n_clicks, stock_list, risk_reward):
         # Parse stock list
         stocks = [s.strip() for s in stock_list.split(",") if s.strip()]
         
-        # Run screening
-        results = screening_manager.get_eod_signals(stocks, risk_reward)
+        # Run screening with analysis mode
+        results = screening_manager.get_eod_signals(stocks, risk_reward, analysis_mode)
         
         # Create results display
         bullish_count = results['summary']['bullish_count']
@@ -180,6 +194,7 @@ def run_eod_screening(n_clicks, stock_list, risk_reward):
         
         content = [
             html.H5("📊 EOD Screening Results"),
+            html.P(f"Analysis Mode: {analysis_mode.title()}"),
             html.P(f"Total Stocks Analyzed: {total_stocks}"),
             html.P(f"Bullish Signals: {bullish_count} | Bearish Signals: {bearish_count}"),
             html.Br()
