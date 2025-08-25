@@ -1,0 +1,40 @@
+# AI Hedge Fund Project Rules for Cursor
+
+## Environment Setup
+- This project uses Poetry for dependency management
+- Python interpreter: C:\Users\Admin\AppData\Local\pypoetry\Cache\virtualenvs\ai-hedge-fund-Dot02FSf-py3.13\Scripts\python.exe
+- Always use `poetry run` prefix for running Python scripts
+- Source code is in the `src/` directory
+
+## Package Management
+- Dependencies are managed in `pyproject.toml`
+- Use `poetry add <package>` to add new dependencies
+- Use `poetry install` to install all dependencies
+- Never use `pip install` directly
+
+## Code Style
+- Use Black for code formatting
+- Use Flake8 for linting
+- Follow PEP 8 guidelines
+- Use type hints where possible
+
+## Project Structure
+- Main source code: `src/`
+- Tests: `tests/`
+- Data: `data/`
+- Documentation: `docs/`
+- Junk files: `junk/` (excluded from analysis)
+
+## Database
+- Primary database: `data/comprehensive_equity.duckdb`
+- Options data table: `options_chain_data`
+- Use DuckDB for all database operations
+
+## Running Scripts
+- Always use: `poetry run python <script>`
+- For modules: `poetry run python -m <module>`
+- For tests: `poetry run pytest`
+
+## Environment Variables
+- Set PYTHONPATH=./src
+- Use .env file for configuration (if needed)
