@@ -47,7 +47,7 @@ class ScreeningManager:
         Run comprehensive screening for all modules.
         
         Args:
-            stock_list: List of stocks to screen (defaults to Nifty 50)
+            stock_list: List of stocks to screen (None = all stocks from database)
             include_options: Whether to include options analysis
             include_predictions: Whether to include market predictions
             
@@ -57,7 +57,18 @@ class ScreeningManager:
         self.logger.info("Starting comprehensive screening")
         
         if stock_list is None:
-            stock_list = self.default_indian_stocks
+            # Get all stocks from database for comprehensive screening
+            try:
+                from src.data.database.duckdb_manager import DatabaseManager
+                db_manager = DatabaseManager()
+                all_symbols = db_manager.get_available_symbols()
+                # Convert to .NS format for consistency
+                stock_list = [f"{symbol}.NS" for symbol in all_symbols]
+                self.logger.info(f"Using all {len(stock_list)} stocks from database for comprehensive screening")
+            except Exception as e:
+                self.logger.error(f"Error getting all stocks from database: {e}")
+                self.logger.info("Falling back to default stock list")
+                stock_list = self.default_indian_stocks
         
         results = {
             'timestamp': datetime.now().isoformat(),
@@ -158,10 +169,11 @@ class ScreeningManager:
         # Run unified screener with specified analysis mode
         import asyncio
         try:
+            # Use adjusted criteria for better signal generation
             results = asyncio.run(self.eod_screener.screen_universe(
                 symbols=symbols,
-                min_volume=100000,
-                min_price=10.0,
+                min_volume=50000,  # Lower volume threshold
+                min_price=5.0,     # Lower price threshold
                 analysis_mode=analysis_mode
             ))
             

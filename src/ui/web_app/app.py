@@ -434,20 +434,16 @@ def run_market_predictions(n_clicks):
 @app.callback(
     Output("comprehensive-results", "children"),
     Input("btn-comprehensive", "n_clicks"),
-    Input("stock-list", "value"),
     prevent_initial_call=True
 )
-def run_comprehensive_screening(n_clicks, stock_list):
+def run_comprehensive_screening(n_clicks):
     if n_clicks is None:
         return "Click 'Run Comprehensive Screening' to start..."
     
     try:
-        # Parse stock list
-        stocks = [s.strip() for s in stock_list.split(",") if s.strip()]
-        
-        # Run comprehensive screening
+        # Run comprehensive screening on ALL stocks from database
         results = screening_manager.run_comprehensive_screening(
-            stock_list=stocks,
+            stock_list=None,  # None means use all stocks from database
             include_options=True,
             include_predictions=True
         )
@@ -456,21 +452,54 @@ def run_comprehensive_screening(n_clicks, stock_list):
         recommendations = screening_manager.generate_trading_recommendations(results)
         
         content = [
-            html.H5("Comprehensive Analysis Results"),
+            html.H5("🚀 Comprehensive Analysis Results"),
             html.Br(),
-            html.H6("Summary:"),
-            html.P(f"Total Stocks: {results['summary']['total_stocks']}"),
-            html.P(f"EOD Signals: {results['summary']['eod_signals']}"),
-            html.P(f"Intraday Signals: {results['summary']['intraday_signals']}"),
-            html.P(f"Options Analysis: {results['summary']['options_analysis_count']}"),
-            html.P(f"Predictions: {results['summary']['predictions_count']}"),
+            html.H6("📊 Summary:"),
+            html.P(f"Total Stocks Analyzed: {results['summary']['total_stocks']}"),
+            html.P(f"📈 EOD Signals: {results['summary']['eod_signals']}"),
+            html.P(f"⚡ Intraday Signals: {results['summary']['intraday_signals']}"),
+            html.P(f"🎯 Options Analysis: {results['summary']['options_analysis_count']}"),
+            html.P(f"🔮 Predictions: {results['summary']['predictions_count']}"),
             html.Hr()
         ]
+        
+        # Show EOD signals if available
+        eod_results = results.get('stock_screening', {}).get('eod', {})
+        if eod_results.get('bullish_signals'):
+            content.extend([
+                html.H6("📈 Top EOD Bullish Signals:"),
+                html.Ul([
+                    html.Li(f"{signal.get('symbol', signal.get('ticker', 'Unknown'))} - {signal['confidence']}% confidence - Entry: ₹{signal['entry_price']:.2f}")
+                    for signal in eod_results['bullish_signals'][:5]
+                ]),
+                html.Hr()
+            ])
+        
+        if eod_results.get('bearish_signals'):
+            content.extend([
+                html.H6("📉 Top EOD Bearish Signals:"),
+                html.Ul([
+                    html.Li(f"{signal.get('symbol', signal.get('ticker', 'Unknown'))} - {signal['confidence']}% confidence - Entry: ₹{signal['entry_price']:.2f}")
+                    for signal in eod_results['bearish_signals'][:5]
+                ]),
+                html.Hr()
+            ])
+        
+        # Show message if no EOD signals found
+        if not eod_results.get('bullish_signals') and not eod_results.get('bearish_signals'):
+            content.extend([
+                html.Div([
+                    html.H6("💡 No EOD Signals Found", className="text-info"),
+                    html.P("The comprehensive screening analyzed all stocks but found no signals with current criteria."),
+                    html.P("This is normal - signals are generated only when specific technical conditions are met."),
+                    html.Hr()
+                ], className="alert alert-info")
+            ])
         
         # High confidence signals
         if recommendations.get('high_confidence_signals'):
             content.extend([
-                html.H6("High Confidence Signals:"),
+                html.H6("🎯 High Confidence Signals:"),
                 html.Ul([
                     html.Li(f"{signal['ticker']} - {signal['signal']} - {signal['confidence']}% confidence")
                     for signal in recommendations['high_confidence_signals'][:5]
@@ -501,8 +530,17 @@ def run_comprehensive_screening(n_clicks, stock_list):
         
     except Exception as e:
         return html.Div([
-            html.H5("Error occurred during comprehensive screening"),
-            html.P(str(e), className="text-danger")
+            html.H5("❌ Error occurred during comprehensive screening"),
+            html.P(f"Error: {str(e)}", className="text-danger"),
+            html.P("This might be due to:", className="text-muted"),
+            html.Ul([
+                html.Li("Database connection issues"),
+                html.Li("Insufficient data for analysis"),
+                html.Li("Network connectivity problems"),
+                html.Li("System resource limitations")
+            ], className="text-muted"),
+            html.Hr(),
+            html.P("💡 Try running individual screenings (EOD, Intraday) instead.", className="text-info")
         ])
 
 if __name__ == '__main__':

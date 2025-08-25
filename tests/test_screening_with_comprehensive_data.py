@@ -162,7 +162,8 @@ def test_screening_performance():
     print(f"\n⚡ PERFORMANCE TESTING")
     print("=" * 40)
     
-    screener = SimpleEODScreener()
+            from src.screening.duckdb_eod_screener import duckdb_eod_screener
+        screener = duckdb_eod_screener
     
     # Test different sample sizes
     sample_sizes = [10, 25, 50, 100]
