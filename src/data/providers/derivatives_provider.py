@@ -1,10 +1,12 @@
 import requests
 import time
 import logging
+import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 from src.data.providers.base_provider import DataProviderError
+from src.nsedata.NseUtility import NseUtils
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,14 @@ class IndianDerivativesProvider:
         self.cache = {}
         self.cache_expiry = 300  # 5 minutes cache
         
+        # Initialize NSE utility for real data
+        try:
+            self.nse = NseUtils()
+            logger.info("✅ NSE utility initialized for real derivatives data")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize NSE utility: {e}")
+            self.nse = None
+        
         # Setup session headers
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -98,24 +108,6 @@ class IndianDerivativesProvider:
                 'name': 'NIFTY FINANCIAL SERVICES',
                 'type': 'Index',
                 'lot_size': 40,
-                'tick_size': 0.05
-            },
-            'RELIANCE': {
-                'name': 'Reliance Industries',
-                'type': 'Stock',
-                'lot_size': 250,
-                'tick_size': 0.05
-            },
-            'TCS': {
-                'name': 'Tata Consultancy Services',
-                'type': 'Stock',
-                'lot_size': 300,
-                'tick_size': 0.05
-            },
-            'INFY': {
-                'name': 'Infosys',
-                'type': 'Stock',
-                'lot_size': 600,
                 'tick_size': 0.05
             }
         }
@@ -146,7 +138,7 @@ class IndianDerivativesProvider:
         }
     
     def get_option_chain(self, underlying: str, expiry_date: Optional[str] = None) -> Optional[OptionChain]:
-        """Get complete option chain for an underlying."""
+        """Get complete option chain for an underlying using real NSE data."""
         cache_key = f"option_chain_{underlying}_{expiry_date}"
         cached_data = self._get_cached_data(cache_key)
         if cached_data:
@@ -155,193 +147,192 @@ class IndianDerivativesProvider:
         try:
             self._rate_limit()
             
-            # Simulate option chain data
-            # In production, this would fetch from NSE
+            # Check if NSE utility is available
+            if not self.nse:
+                logger.error("❌ NSE utility not available, cannot fetch real data")
+                return None
+            
+            # Validate underlying
             if underlying not in self.major_underlyings:
                 logger.warning(f"Unknown underlying: {underlying}")
                 return None
             
-            # Generate expiry date if not provided
-            if not expiry_date:
-                # Next Thursday
-                today = datetime.now()
-                days_until_thursday = (3 - today.weekday()) % 7
-                if days_until_thursday == 0:
-                    days_until_thursday = 7
-                expiry_date = (today + timedelta(days=days_until_thursday)).strftime('%Y-%m-%d')
+            logger.info(f"🔄 Fetching real option chain data for {underlying}")
             
-            # Simulate spot price
-            spot_prices = {
-                'NIFTY': 22000.0,
-                'BANKNIFTY': 48000.0,
-                'FINNIFTY': 20000.0,
-                'RELIANCE': 1424.80,
-                'TCS': 3102.60,
-                'INFY': 1496.40
-            }
-            spot_price = spot_prices.get(underlying, 1000.0)
+            # Get real option chain data from NSE
+            options_df = self.nse.get_live_option_chain(underlying, expiry_date, oi_mode="full", indices=True)
             
-            # Generate strike prices around spot
-            strikes = []
-            for i in range(-10, 11):  # 21 strikes around spot
-                if underlying in ['NIFTY', 'BANKNIFTY', 'FINNIFTY']:
-                    strike = spot_price + (i * 100)
+            if options_df is None or options_df.empty:
+                logger.warning(f"❌ No option chain data available for {underlying}")
+                return None
+            
+            # Get real spot price from futures data
+            try:
+                futures_df = self.nse.futures_data(underlying, indices=True)
+                if futures_df is not None and not futures_df.empty:
+                    # Get the current month futures price as spot
+                    spot_price = futures_df['lastPrice'].iloc[0] if 'lastPrice' in futures_df.columns else None
+                    if spot_price is None:
+                        # Fallback to first available price
+                        price_columns = [col for col in futures_df.columns if 'price' in col.lower() or 'ltp' in col.lower()]
+                        if price_columns:
+                            spot_price = futures_df[price_columns[0]].iloc[0]
+                        else:
+                            spot_price = 0.0
                 else:
-                    strike = spot_price + (i * 10)
-                strikes.append(strike)
+                    spot_price = 0.0
+            except Exception as e:
+                logger.warning(f"⚠️ Could not fetch futures data for spot price: {e}")
+                spot_price = 0.0
             
-            # Generate call options
+            # Convert DataFrame to OptionChain format
             call_options = []
-            for strike in strikes:
-                if strike <= spot_price:
-                    # ITM call
-                    intrinsic_value = spot_price - strike
-                    time_value = max(0, (strike / spot_price) * 50)
-                else:
-                    # OTM call
-                    intrinsic_value = 0
-                    time_value = max(0, (spot_price / strike) * 30)
-                
-                option_price = intrinsic_value + time_value
-                
-                # Calculate Greeks (simplified)
-                delta = max(0, min(1, (spot_price - strike) / (spot_price * 0.1)))
-                gamma = 0.001
-                theta = -option_price * 0.01
-                vega = option_price * 0.1
-                
-                call_option = OptionContract(
-                    symbol=f"{underlying}{expiry_date.replace('-', '')}CE{int(strike)}",
-                    strike_price=strike,
-                    expiry_date=expiry_date,
-                    option_type='CE',
-                    underlying=underlying,
-                    last_price=option_price,
-                    bid=option_price * 0.99,
-                    ask=option_price * 1.01,
-                    volume=1000 + (abs(strike - spot_price) * 10),
-                    open_interest=5000 + (abs(strike - spot_price) * 50),
-                    implied_volatility=0.25 + (abs(strike - spot_price) / spot_price) * 0.1,
-                    delta=delta,
-                    gamma=gamma,
-                    theta=theta,
-                    vega=vega,
-                    change=option_price * 0.02,
-                    change_percent=2.0,
-                    high=option_price * 1.05,
-                    low=option_price * 0.95,
-                    open=option_price * 1.02
-                )
-                call_options.append(call_option)
-            
-            # Generate put options
             put_options = []
-            for strike in strikes:
-                if strike >= spot_price:
-                    # ITM put
-                    intrinsic_value = strike - spot_price
-                    time_value = max(0, (spot_price / strike) * 50)
-                else:
-                    # OTM put
-                    intrinsic_value = 0
-                    time_value = max(0, (strike / spot_price) * 30)
-                
-                option_price = intrinsic_value + time_value
-                
-                # Calculate Greeks (simplified)
-                delta = min(0, max(-1, (strike - spot_price) / (spot_price * 0.1)))
-                gamma = 0.001
-                theta = -option_price * 0.01
-                vega = option_price * 0.1
-                
-                put_option = OptionContract(
-                    symbol=f"{underlying}{expiry_date.replace('-', '')}PE{int(strike)}",
-                    strike_price=strike,
-                    expiry_date=expiry_date,
-                    option_type='PE',
-                    underlying=underlying,
-                    last_price=option_price,
-                    bid=option_price * 0.99,
-                    ask=option_price * 1.01,
-                    volume=1000 + (abs(strike - spot_price) * 10),
-                    open_interest=5000 + (abs(strike - spot_price) * 50),
-                    implied_volatility=0.25 + (abs(strike - spot_price) / spot_price) * 0.1,
-                    delta=delta,
-                    gamma=gamma,
-                    theta=theta,
-                    vega=vega,
-                    change=option_price * 0.02,
-                    change_percent=2.0,
-                    high=option_price * 1.05,
-                    low=option_price * 0.95,
-                    open=option_price * 1.02
-                )
-                put_options.append(put_option)
             
+            for _, row in options_df.iterrows():
+                # Create call option
+                if row.get('CALLS_LTP', 0) > 0:
+                    call_option = OptionContract(
+                        symbol=f"{underlying}{row['Expiry_Date'].replace('-', '')}CE{int(row['Strike_Price'])}",
+                        strike_price=float(row['Strike_Price']),
+                        expiry_date=row['Expiry_Date'],
+                        option_type='CE',
+                        underlying=underlying,
+                        last_price=float(row.get('CALLS_LTP', 0)),
+                        bid=float(row.get('CALLS_Bid_Price', 0)),
+                        ask=float(row.get('CALLS_Ask_Price', 0)),
+                        volume=int(row.get('CALLS_Volume', 0)),
+                        open_interest=int(row.get('CALLS_OI', 0)),
+                        implied_volatility=float(row.get('CALLS_IV', 0)),
+                        delta=0.0,  # NSE doesn't provide Greeks
+                        gamma=0.0,
+                        theta=0.0,
+                        vega=0.0,
+                        change=float(row.get('CALLS_Net_Chng', 0)),
+                        change_percent=0.0,  # Calculate if needed
+                        high=0.0,  # Not available in NSE data
+                        low=0.0,
+                        open=0.0
+                    )
+                    call_options.append(call_option)
+                
+                # Create put option
+                if row.get('PUTS_LTP', 0) > 0:
+                    put_option = OptionContract(
+                        symbol=f"{underlying}{row['Expiry_Date'].replace('-', '')}PE{int(row['Strike_Price'])}",
+                        strike_price=float(row['Strike_Price']),
+                        expiry_date=row['Expiry_Date'],
+                        option_type='PE',
+                        underlying=underlying,
+                        last_price=float(row.get('PUTS_LTP', 0)),
+                        bid=float(row.get('PUTS_Bid_Price', 0)),
+                        ask=float(row.get('PUTS_Ask_Price', 0)),
+                        volume=int(row.get('PUTS_Volume', 0)),
+                        open_interest=int(row.get('PUTS_OI', 0)),
+                        implied_volatility=float(row.get('PUTS_IV', 0)),
+                        delta=0.0,  # NSE doesn't provide Greeks
+                        gamma=0.0,
+                        theta=0.0,
+                        vega=0.0,
+                        change=float(row.get('PUTS_Net_Chng', 0)),
+                        change_percent=0.0,  # Calculate if needed
+                        high=0.0,  # Not available in NSE data
+                        low=0.0,
+                        open=0.0
+                    )
+                    put_options.append(put_option)
+            
+            # Create OptionChain object
             option_chain = OptionChain(
                 underlying=underlying,
-                expiry_date=expiry_date,
+                expiry_date=expiry_date or options_df['Expiry_Date'].iloc[0] if not options_df.empty else None,
                 spot_price=spot_price,
                 call_options=call_options,
                 put_options=put_options,
                 timestamp=datetime.now().isoformat()
             )
             
+            # Cache the result
             self._cache_data(cache_key, option_chain)
+            
+            logger.info(f"✅ Successfully fetched real option chain for {underlying}: {len(call_options)} calls, {len(put_options)} puts")
             return option_chain
             
         except Exception as e:
-            logger.error(f"Error fetching option chain for {underlying}: {str(e)}")
+            logger.error(f"❌ Error fetching real option chain for {underlying}: {e}")
             return None
     
     def get_futures_contracts(self, underlying: str) -> List[FuturesContract]:
-        """Get futures contracts for an underlying."""
+        """Get futures contracts for an underlying using real NSE data."""
         try:
             self._rate_limit()
             
-            # Simulate futures contracts
+            # Check if NSE utility is available
+            if not self.nse:
+                logger.error("❌ NSE utility not available, cannot fetch real futures data")
+                return []
+            
+            # Validate underlying
+            if underlying not in self.major_underlyings:
+                logger.warning(f"Unknown underlying: {underlying}")
+                return []
+            
+            logger.info(f"🔄 Fetching real futures contracts for {underlying}")
+            
+            # Get real futures data from NSE
+            futures_df = self.nse.futures_data(underlying, indices=True)
+            
+            if futures_df is None or futures_df.empty:
+                logger.warning(f"❌ No futures data available for {underlying}")
+                return []
+            
             contracts = []
-            spot_prices = {
-                'NIFTY': 22000.0,
-                'BANKNIFTY': 48000.0,
-                'FINNIFTY': 20000.0,
-                'RELIANCE': 1424.80,
-                'TCS': 3102.60,
-                'INFY': 1496.40
-            }
-            spot_price = spot_prices.get(underlying, 1000.0)
             
-            # Generate contracts for next 3 months
-            for i in range(3):
-                contract_date = datetime.now() + timedelta(days=30 * (i + 1))
-                expiry_date = contract_date.strftime('%Y-%m-%d')
-                
-                # Simulate futures pricing (contango)
-                futures_price = spot_price * (1 + (i * 0.005))  # 0.5% contango per month
-                basis = futures_price - spot_price
-                
-                contract = FuturesContract(
-                    symbol=f"{underlying}{expiry_date.replace('-', '')}",
-                    expiry_date=expiry_date,
-                    underlying=underlying,
-                    last_price=futures_price,
-                    bid=futures_price * 0.999,
-                    ask=futures_price * 1.001,
-                    volume=100000 + (i * 50000),
-                    open_interest=50000 + (i * 25000),
-                    change=futures_price * 0.01,
-                    change_percent=1.0,
-                    high=futures_price * 1.02,
-                    low=futures_price * 0.98,
-                    open=futures_price * 1.01,
-                    basis=basis
-                )
-                contracts.append(contract)
+            for _, row in futures_df.iterrows():
+                try:
+                    # Extract contract details
+                    expiry_date = row.get('expiryDate', '')
+                    last_price = float(row.get('lastPrice', 0))
+                    bid_price = float(row.get('bidPrice', 0))
+                    ask_price = float(row.get('askPrice', 0))
+                    volume = int(row.get('totalTradedVolume', 0))
+                    open_interest = int(row.get('openInterest', 0))
+                    change = float(row.get('change', 0))
+                    change_percent = float(row.get('pChange', 0))
+                    high = float(row.get('dayHigh', 0))
+                    low = float(row.get('dayLow', 0))
+                    open_price = float(row.get('open', 0))
+                    
+                    # Calculate basis (difference from spot - simplified)
+                    basis = 0.0  # Would need spot price for accurate calculation
+                    
+                    contract = FuturesContract(
+                        symbol=row.get('identifier', f"{underlying}{expiry_date}"),
+                        expiry_date=expiry_date,
+                        underlying=underlying,
+                        last_price=last_price,
+                        bid=bid_price,
+                        ask=ask_price,
+                        volume=volume,
+                        open_interest=open_interest,
+                        change=change,
+                        change_percent=change_percent,
+                        high=high,
+                        low=low,
+                        open=open_price,
+                        basis=basis
+                    )
+                    contracts.append(contract)
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Error processing futures contract row: {e}")
+                    continue
             
+            logger.info(f"✅ Successfully fetched {len(contracts)} real futures contracts for {underlying}")
             return contracts
             
         except Exception as e:
-            logger.error(f"Error fetching futures contracts for {underlying}: {str(e)}")
+            logger.error(f"❌ Error fetching real futures contracts for {underlying}: {e}")
             return []
     
     def get_option_contract(self, symbol: str) -> Optional[OptionContract]:
