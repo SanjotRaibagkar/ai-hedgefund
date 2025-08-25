@@ -37,30 +37,27 @@ class MarketPredictor:
         self.logger.info(f"Predicting {index} movement for {timeframe}")
         
         try:
-            # Get current market data
-            index_ticker = f"{index}.NS"
-            current_data = get_prices(index_ticker, 
-                                    (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d'),
-                                    datetime.now().strftime('%Y-%m-%d'))
-            
-            if current_data is None or current_data.empty:
-                self.logger.error(f"Could not fetch {index} data")
-                return {}
-            
-            current_price = current_data['close_price'].iloc[-1]
-            
-            # Get options data
+            # Get options analysis (this includes current price)
             options_analysis = self.options_analyzer.analyze_index_options(index)
             
-            # Generate predictions based on timeframe
+            if not options_analysis:
+                self.logger.error(f"Could not fetch {index} options analysis")
+                return {}
+            
+            current_price = options_analysis.get('current_price', 0)
+            if current_price == 0:
+                self.logger.error(f"Could not get current price for {index}")
+                return {}
+            
+            # Generate predictions based on timeframe using only options data
             if timeframe == '15min':
-                prediction = self._predict_15min_movement(current_data, options_analysis, current_price)
+                prediction = self._predict_15min_movement(options_analysis, current_price)
             elif timeframe == '1hour':
-                prediction = self._predict_1hour_movement(current_data, options_analysis, current_price)
+                prediction = self._predict_1hour_movement(options_analysis, current_price)
             elif timeframe == 'eod':
-                prediction = self._predict_eod_movement(current_data, options_analysis, current_price)
+                prediction = self._predict_eod_movement(options_analysis, current_price)
             elif timeframe == 'multiday':
-                prediction = self._predict_multiday_movement(current_data, options_analysis, current_price)
+                prediction = self._predict_multiday_movement(options_analysis, current_price)
             else:
                 self.logger.error(f"Invalid timeframe: {timeframe}")
                 return {}
@@ -77,21 +74,15 @@ class MarketPredictor:
             self.logger.error(f"Error predicting {index} movement: {e}")
             return {}
     
-    def _predict_15min_movement(self, data: pd.DataFrame, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
-        """Predict 15-minute market movement."""
+    def _predict_15min_movement(self, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
+        """Predict 15-minute market movement using options data."""
         try:
-            # Calculate short-term indicators
-            indicators = self._calculate_short_term_indicators(data)
-            
             # Get options sentiment
             options_sentiment = options_analysis.get('analysis', {}).get('market_sentiment', {})
             
-            # Analyze recent price action
-            price_action = self._analyze_price_action(data, '15min')
-            
-            # Generate prediction
-            prediction = self._generate_movement_prediction(
-                indicators, options_sentiment, price_action, '15min'
+            # Generate prediction based on options sentiment
+            prediction = self._generate_options_based_prediction(
+                options_sentiment, current_price, '15min'
             )
             
             return prediction
@@ -100,21 +91,15 @@ class MarketPredictor:
             self.logger.error(f"Error in 15min prediction: {e}")
             return {}
     
-    def _predict_1hour_movement(self, data: pd.DataFrame, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
-        """Predict 1-hour market movement."""
+    def _predict_1hour_movement(self, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
+        """Predict 1-hour market movement using options data."""
         try:
-            # Calculate medium-term indicators
-            indicators = self._calculate_medium_term_indicators(data)
-            
             # Get options sentiment
             options_sentiment = options_analysis.get('analysis', {}).get('market_sentiment', {})
             
-            # Analyze recent price action
-            price_action = self._analyze_price_action(data, '1hour')
-            
-            # Generate prediction
-            prediction = self._generate_movement_prediction(
-                indicators, options_sentiment, price_action, '1hour'
+            # Generate prediction based on options sentiment
+            prediction = self._generate_options_based_prediction(
+                options_sentiment, current_price, '1hour'
             )
             
             return prediction
@@ -123,21 +108,15 @@ class MarketPredictor:
             self.logger.error(f"Error in 1hour prediction: {e}")
             return {}
     
-    def _predict_eod_movement(self, data: pd.DataFrame, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
-        """Predict end-of-day market movement."""
+    def _predict_eod_movement(self, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
+        """Predict end-of-day market movement using options data."""
         try:
-            # Calculate daily indicators
-            indicators = self._calculate_daily_indicators(data)
-            
             # Get options sentiment
             options_sentiment = options_analysis.get('analysis', {}).get('market_sentiment', {})
             
-            # Analyze daily price action
-            price_action = self._analyze_price_action(data, 'daily')
-            
-            # Generate prediction
-            prediction = self._generate_movement_prediction(
-                indicators, options_sentiment, price_action, 'daily'
+            # Generate prediction based on options sentiment
+            prediction = self._generate_options_based_prediction(
+                options_sentiment, current_price, 'eod'
             )
             
             return prediction
@@ -146,27 +125,96 @@ class MarketPredictor:
             self.logger.error(f"Error in EOD prediction: {e}")
             return {}
     
-    def _predict_multiday_movement(self, data: pd.DataFrame, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
-        """Predict multi-day market movement."""
+    def _predict_multiday_movement(self, options_analysis: Dict, current_price: float) -> Dict[str, Any]:
+        """Predict multi-day market movement using options data."""
         try:
-            # Calculate swing indicators
-            indicators = self._calculate_swing_indicators(data)
-            
             # Get options sentiment
             options_sentiment = options_analysis.get('analysis', {}).get('market_sentiment', {})
             
-            # Analyze swing price action
-            price_action = self._analyze_price_action(data, 'swing')
-            
-            # Generate prediction
-            prediction = self._generate_movement_prediction(
-                indicators, options_sentiment, price_action, 'swing'
+            # Generate prediction based on options sentiment
+            prediction = self._generate_options_based_prediction(
+                options_sentiment, current_price, 'multiday'
             )
             
             return prediction
             
         except Exception as e:
             self.logger.error(f"Error in multiday prediction: {e}")
+            return {}
+    
+    def _generate_options_based_prediction(self, options_sentiment: Dict, current_price: float, timeframe: str) -> Dict[str, Any]:
+        """Generate prediction based on options sentiment only."""
+        try:
+            # Calculate prediction score based on options sentiment
+            score = 0
+            reasons = []
+            
+            # Overall sentiment analysis
+            overall_sentiment = options_sentiment.get('overall_sentiment', 'NEUTRAL')
+            if overall_sentiment == 'BULLISH':
+                score += 2
+                reasons.append("Options sentiment strongly bullish")
+            elif overall_sentiment == 'BEARISH':
+                score -= 2
+                reasons.append("Options sentiment strongly bearish")
+            
+            # PCR sentiment analysis
+            pcr_sentiment = options_sentiment.get('pcr_sentiment', 'NEUTRAL')
+            if pcr_sentiment == 'BULLISH':
+                score += 1
+                reasons.append("PCR indicates bullish sentiment")
+            elif pcr_sentiment == 'BEARISH':
+                score -= 1
+                reasons.append("PCR indicates bearish sentiment")
+            
+            # IV sentiment analysis
+            iv_sentiment = options_sentiment.get('iv_sentiment', 'NEUTRAL')
+            if iv_sentiment == 'BULLISH':
+                score += 1
+                reasons.append("IV skew indicates bullish sentiment")
+            elif iv_sentiment == 'BEARISH':
+                score -= 1
+                reasons.append("IV skew indicates bearish sentiment")
+            
+            # Determine direction and confidence
+            if score >= 2:
+                direction = 'BULLISH'
+                confidence = min(90, 60 + score * 10)
+            elif score <= -2:
+                direction = 'BEARISH'
+                confidence = min(90, 60 + abs(score) * 10)
+            else:
+                direction = 'NEUTRAL'
+                confidence = 50
+            
+            # Calculate potential movement range based on timeframe
+            if timeframe == '15min':
+                movement_pct = 0.5  # 0.5% movement
+            elif timeframe == '1hour':
+                movement_pct = 1.0  # 1% movement
+            elif timeframe == 'eod':
+                movement_pct = 2.0  # 2% movement
+            else:  # multiday
+                movement_pct = 3.0  # 3% movement
+            
+            movement = current_price * (movement_pct / 100)
+            
+            return {
+                'direction': direction,
+                'confidence': confidence,
+                'score': score,
+                'reasons': reasons,
+                'movement_range': {
+                    'upper': current_price + movement,
+                    'lower': current_price - movement,
+                    'range': movement * 2
+                },
+                'timeframe': timeframe,
+                'prediction_type': 'options_based'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error generating options-based prediction: {e}")
             return {}
     
     def _calculate_short_term_indicators(self, data: pd.DataFrame) -> Dict[str, Any]:
