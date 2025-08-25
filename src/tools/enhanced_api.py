@@ -33,7 +33,8 @@ from src.data.providers.provider_factory import (
     get_corporate_actions_service,
     get_intraday_provider,
     get_market_data_provider,
-    get_nse_utility_provider
+    get_nse_utility_provider,
+    get_eod_data_service
 )
 from src.data.providers.duckdb_provider import DuckDBProvider
 from src.data.providers.base_provider import DataProviderError
@@ -1078,4 +1079,229 @@ def get_prices_yahoo(ticker: str, start_date: str, end_date: str) -> List[Price]
         return []
     except Exception as e:
         logger.error(f"Error fetching Yahoo Finance prices: {str(e)}")
-        return [] 
+        return []
+
+
+# ============================================================================
+# EOD DATA FUNCTIONS
+# ============================================================================
+
+def get_fno_bhav_copy_data(
+    symbol: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None
+) -> pd.DataFrame:
+    """Get FNO Bhav Copy data from EOD database."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_fno_bhav_copy(symbol, start_date, end_date, limit)
+    except Exception as e:
+        logger.error(f"Error fetching FNO Bhav Copy data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_equity_bhav_copy_delivery_data(
+    symbol: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None
+) -> pd.DataFrame:
+    """Get Equity Bhav Copy with Delivery data from EOD database."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_equity_bhav_copy_delivery(symbol, start_date, end_date, limit)
+    except Exception as e:
+        logger.error(f"Error fetching Equity Bhav Copy Delivery data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_bhav_copy_indices_data(
+    index_name: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None
+) -> pd.DataFrame:
+    """Get Bhav Copy Indices data from EOD database."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_bhav_copy_indices(index_name, start_date, end_date, limit)
+    except Exception as e:
+        logger.error(f"Error fetching Bhav Copy Indices data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_fii_dii_activity_data(
+    category: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None
+) -> pd.DataFrame:
+    """Get FII DII Activity data from EOD database."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_fii_dii_activity(category, start_date, end_date, limit)
+    except Exception as e:
+        logger.error(f"Error fetching FII DII Activity data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_latest_fno_data(symbol: str, days: int = 30) -> pd.DataFrame:
+    """Get latest FNO data for a specific symbol."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_latest_fno_data(symbol, days)
+    except Exception as e:
+        logger.error(f"Error fetching latest FNO data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_latest_equity_data(symbol: str, days: int = 30) -> pd.DataFrame:
+    """Get latest equity data for a specific symbol."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_latest_equity_data(symbol, days)
+    except Exception as e:
+        logger.error(f"Error fetching latest equity data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_latest_index_data(index_name: str, days: int = 30) -> pd.DataFrame:
+    """Get latest index data for a specific index."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_latest_index_data(index_name, days)
+    except Exception as e:
+        logger.error(f"Error fetching latest index data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_latest_fii_dii_data(days: int = 30) -> pd.DataFrame:
+    """Get latest FII/DII activity data."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_latest_fii_dii_data(days)
+    except Exception as e:
+        logger.error(f"Error fetching latest FII/DII data: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_eod_database_stats() -> Dict[str, Any]:
+    """Get database statistics for all EOD tables."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_database_stats()
+    except Exception as e:
+        logger.error(f"Error fetching EOD database stats: {str(e)}")
+        return {}
+
+
+def get_top_symbols_by_volume(table: str = 'fno_bhav_copy', days: int = 30, limit: int = 10) -> pd.DataFrame:
+    """Get top symbols by volume for the specified table."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_top_symbols_by_volume(table, days, limit)
+    except Exception as e:
+        logger.error(f"Error fetching top symbols by volume: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_market_summary(date: Optional[str] = None) -> Dict[str, Any]:
+    """Get market summary for a specific date or latest available date."""
+    try:
+        eod_service = get_eod_data_service()
+        return eod_service.get_market_summary(date)
+    except Exception as e:
+        logger.error(f"Error fetching market summary: {str(e)}")
+        return {}
+
+
+def get_option_chain_from_eod(underlying: str, expiry_date: Optional[str] = None) -> pd.DataFrame:
+    """Get option chain data from EOD database for a specific underlying."""
+    try:
+        eod_service = get_eod_data_service()
+        
+        # Get FNO data for the underlying
+        fno_data = eod_service.get_fno_bhav_copy(symbol=underlying, limit=1000)
+        
+        if fno_data.empty:
+            return pd.DataFrame()
+        
+        # Filter by expiry date if provided
+        if expiry_date:
+            fno_data = fno_data[fno_data['XpryDt'] == expiry_date]
+        
+        # Get the latest date
+        latest_date = fno_data['TRADE_DATE'].max()
+        latest_data = fno_data[fno_data['TRADE_DATE'] == latest_date]
+        
+        # Separate calls and puts
+        calls = latest_data[latest_data['OptnTp'] == 'CE'].copy()
+        puts = latest_data[latest_data['OptnTp'] == 'PE'].copy()
+        
+        # Add option type column
+        calls['option_type'] = 'CE'
+        puts['option_type'] = 'PE'
+        
+        # Combine calls and puts
+        option_chain = pd.concat([calls, puts], ignore_index=True)
+        
+        # Sort by strike price
+        option_chain = option_chain.sort_values(['StrkPric', 'option_type'])
+        
+        logger.info(f"✅ Retrieved option chain for {underlying}: {len(calls)} calls, {len(puts)} puts")
+        return option_chain
+        
+    except Exception as e:
+        logger.error(f"Error fetching option chain from EOD: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_derivatives_summary(underlying: str, days: int = 30) -> Dict[str, Any]:
+    """Get derivatives summary for a specific underlying."""
+    try:
+        eod_service = get_eod_data_service()
+        
+        # Get FNO data for the underlying
+        fno_data = eod_service.get_latest_fno_data(underlying, days)
+        
+        if fno_data.empty:
+            return {}
+        
+        # Calculate summary statistics
+        summary = {
+            'underlying': underlying,
+            'total_contracts': len(fno_data),
+            'unique_dates': fno_data['TRADE_DATE'].nunique(),
+            'date_range': {
+                'start': fno_data['TRADE_DATE'].min(),
+                'end': fno_data['TRADE_DATE'].max()
+            },
+            'volume_stats': {
+                'total_volume': fno_data['TtlTradgVol'].sum(),
+                'avg_volume': fno_data['TtlTradgVol'].mean(),
+                'max_volume': fno_data['TtlTradgVol'].max()
+            },
+            'oi_stats': {
+                'total_oi': fno_data['OpnIntrst'].sum(),
+                'avg_oi': fno_data['OpnIntrst'].mean(),
+                'max_oi': fno_data['OpnIntrst'].max()
+            },
+            'price_stats': {
+                'avg_close': fno_data['ClsPric'].mean(),
+                'max_close': fno_data['ClsPric'].max(),
+                'min_close': fno_data['ClsPric'].min()
+            },
+            'contract_types': {
+                'calls': len(fno_data[fno_data['OptnTp'] == 'CE']),
+                'puts': len(fno_data[fno_data['OptnTp'] == 'PE']),
+                'futures': len(fno_data[fno_data['OptnTp'].isna()])
+            }
+        }
+        
+        logger.info(f"✅ Generated derivatives summary for {underlying}")
+        return summary
+        
+    except Exception as e:
+        logger.error(f"Error generating derivatives summary: {str(e)}")
+        return {} 

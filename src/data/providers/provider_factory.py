@@ -14,6 +14,7 @@ from .commodity_provider import get_commodity_provider
 from .forex_provider import get_forex_provider
 from .derivatives_provider import get_derivatives_provider
 from .corporate_actions_provider import get_corporate_actions_provider
+from .eod_data_provider import get_eod_data_provider
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class DataProviderFactory:
         self.forex_provider = get_forex_provider()
         self.derivatives_provider = get_derivatives_provider()
         self.corporate_actions_provider = get_corporate_actions_provider()
+        self.eod_data_provider = get_eod_data_provider()
         
         # Future providers can be added here:
         # self.providers.append(AlphaVantageProvider())
@@ -163,4 +165,10 @@ def get_derivatives_service():
 
 def get_corporate_actions_service():
     """Get the corporate actions service."""
-    return get_corporate_actions_provider() 
+    return get_corporate_actions_provider()
+
+
+def get_eod_data_service():
+    """Get the EOD data service."""
+    factory = get_provider_factory()
+    return factory.eod_data_provider 
