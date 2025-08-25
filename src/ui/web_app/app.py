@@ -320,128 +320,66 @@ def run_options_analysis(n_clicks):
         return "Click 'Run Options Analysis' to start..."
     
     try:
-        # Import the working options tracker
+        # Import the unified options analyzer
         import sys
         import os
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
         
-        from src.nsedata.NseUtility import NseUtils
+        from src.screening.enhanced_options_analyzer import get_latest_analysis
         
         content = [
             html.H5("🎯 Options Analysis Results"),
             html.Br()
         ]
         
-        # Initialize NSE utility
-        nse = NseUtils()
-        
-        # Analyze both indices
+        # Analyze both indices using unified analyzer
         indices = ['NIFTY', 'BANKNIFTY']
         
         for index in indices:
             try:
-                # Get options data
-                options_data = nse.get_live_option_chain(index, indices=True)
+                # Get analysis using unified analyzer
+                result = get_latest_analysis(index)
                 
-                if options_data is not None and not options_data.empty:
-                    # Get spot price from futures data (more accurate)
-                    try:
-                        futures_data = nse.futures_data(index, indices=True)
-                        if futures_data is not None and not futures_data.empty:
-                            # Get the first row (current month contract) for spot price
-                            current_price = float(futures_data['lastPrice'].iloc[0])
-                        else:
-                            # Fallback to options data if futures fails
-                            strikes = sorted(options_data['Strike_Price'].unique())
-                            current_price = float(strikes[len(strikes)//2])
-                    except Exception as e:
-                        # Fallback to options data if futures fails
-                        strikes = sorted(options_data['Strike_Price'].unique())
-                        current_price = float(strikes[len(strikes)//2])
-                    
-                    # Find ATM strike
-                    strikes = sorted(options_data['Strike_Price'].unique())
-                    atm_strike = min(strikes, key=lambda x: abs(x - current_price))
-                    
-                    # Analyze ATM ± 2 strikes
-                    atm_index = strikes.index(atm_strike)
-                    start_idx = max(0, atm_index - 2)
-                    end_idx = min(len(strikes), atm_index + 3)
-                    strikes_to_analyze = strikes[start_idx:end_idx]
-                    
-                    # OI analysis
-                    total_call_oi = 0
-                    total_put_oi = 0
-                    atm_call_oi = 0
-                    atm_put_oi = 0
-                    atm_call_oi_change = 0
-                    atm_put_oi_change = 0
-                    
-                    for strike in strikes_to_analyze:
-                        strike_data = options_data[options_data['Strike_Price'] == strike]
-                        
-                        if not strike_data.empty:
-                            call_oi = float(strike_data['CALLS_OI'].iloc[0]) if 'CALLS_OI' in strike_data.columns else 0
-                            put_oi = float(strike_data['PUTS_OI'].iloc[0]) if 'PUTS_OI' in strike_data.columns else 0
-                            call_oi_change = float(strike_data['CALLS_Chng_in_OI'].iloc[0]) if 'CALLS_Chng_in_OI' in strike_data.columns else 0
-                            put_oi_change = float(strike_data['PUTS_Chng_in_OI'].iloc[0]) if 'PUTS_Chng_in_OI' in strike_data.columns else 0
-                            
-                            total_call_oi += call_oi
-                            total_put_oi += put_oi
-                            
-                            if strike == atm_strike:
-                                atm_call_oi = call_oi
-                                atm_put_oi = put_oi
-                                atm_call_oi_change = call_oi_change
-                                atm_put_oi_change = put_oi_change
-                    
-                    pcr = total_put_oi / total_call_oi if total_call_oi > 0 else 0
-                    
-                    # Generate signal
-                    signal = "NEUTRAL"
-                    confidence = 50.0
-                    suggested_trade = "Wait for clearer signal"
-                    
-                    # Strategy Rules
-                    if pcr > 0.9 and atm_put_oi_change > 0 and atm_call_oi_change < 0:
-                        signal = "BULLISH"
-                        confidence = min(90, 60 + (pcr - 0.9) * 100)
-                        suggested_trade = "Buy Call (ATM/ITM) or Bull Call Spread"
-                    elif pcr < 0.8 and atm_call_oi_change > 0 and atm_put_oi_change < 0:
-                        signal = "BEARISH"
-                        confidence = min(90, 60 + (0.8 - pcr) * 100)
-                        suggested_trade = "Buy Put (ATM/ITM) or Bear Put Spread"
-                    elif 0.8 <= pcr <= 1.2 and atm_call_oi_change > 0 and atm_put_oi_change > 0:
-                        signal = "RANGE"
-                        confidence = 70.0
-                        suggested_trade = "Sell Straddle/Strangle"
-                    
-                    # Add to content
+                if result:
+                    # Display results
                     content.extend([
-                        html.H6(f"{index} Analysis:"),
-                        html.P(f"💰 Spot Price: ₹{current_price:,.0f}"),
-                        html.P(f"🎯 ATM Strike: ₹{atm_strike:,.0f}"),
-                        html.P(f"📊 PCR: {pcr:.2f}"),
-                        html.P(f"📈 Signal: {signal} (Confidence: {confidence:.1f}%)"),
-                        html.P(f"💡 Trade: {suggested_trade}"),
-                        html.P(f"📊 ATM Call OI: {atm_call_oi:,.0f} | Put OI: {atm_put_oi:,.0f}"),
-                        html.P(f"📈 Call OI Change: {atm_call_oi_change:,.0f} | Put OI Change: {atm_put_oi_change:,.0f}"),
-                        html.Hr()
+                        html.H6(f"📊 {index} Analysis"),
+                        html.Div([
+                            html.Strong(f"Spot Price: ₹{result['current_price']:,.2f}"),
+                            html.Br(),
+                            html.Strong(f"ATM Strike: ₹{result['atm_strike']:,.2f}"),
+                            html.Br(),
+                            html.Strong(f"PCR: {result['pcr']:.2f}"),
+                            html.Br(),
+                            html.Strong(f"Signal: {result['signal']} ({result['confidence']:.1f}% confidence)"),
+                            html.Br(),
+                            html.Strong(f"Trade: {result['suggested_trade']}"),
+                            html.Br(),
+                            html.Small(f"Call OI: {result['atm_call_oi']:,.0f} | Put OI: {result['atm_put_oi']:,.0f}"),
+                            html.Br(),
+                            html.Small(f"Call ΔOI: {result['atm_call_oi_change']:+,.0f} | Put ΔOI: {result['atm_put_oi_change']:+,.0f}"),
+                            html.Br(),
+                            html.Small(f"Support: ₹{result['support']:,.2f} | Resistance: ₹{result['resistance']:,.2f}"),
+                            html.Br(),
+                            html.Small(f"Timestamp: {result['timestamp']}"),
+                            html.Hr()
+                        ])
                     ])
-                    
                 else:
                     content.extend([
-                        html.H6(f"{index} Analysis:"),
-                        html.P("⚠️ No options data available"),
+                        html.H6(f"❌ {index} Analysis Failed"),
+                        html.P(f"Could not fetch {index} options data"),
                         html.Hr()
                     ])
                     
             except Exception as e:
                 content.extend([
-                    html.H6(f"{index} Analysis:"),
-                    html.P(f"❌ Error: {str(e)}"),
+                    html.H6(f"❌ {index} Analysis Error"),
+                    html.P(str(e), className="text-danger"),
                     html.Hr()
                 ])
+        
+        return content
         
         return content
         

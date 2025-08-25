@@ -178,6 +178,33 @@ class DatabaseManager:
             )
         """)
         
+        # Options Chain Data Table
+        self.connection.execute("""
+            CREATE TABLE IF NOT EXISTS options_chain_data (
+                timestamp TIMESTAMP,
+                index_symbol VARCHAR,
+                strike_price DOUBLE,
+                expiry_date DATE,
+                option_type VARCHAR,
+                last_price DOUBLE,
+                bid_price DOUBLE,
+                ask_price DOUBLE,
+                volume BIGINT,
+                open_interest BIGINT,
+                change_in_oi BIGINT,
+                implied_volatility DOUBLE,
+                delta DOUBLE,
+                gamma DOUBLE,
+                theta DOUBLE,
+                vega DOUBLE,
+                spot_price DOUBLE,
+                atm_strike DOUBLE,
+                pcr DOUBLE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (timestamp, index_symbol, strike_price, expiry_date, option_type)
+            )
+        """)
+        
         logger.info("✅ All tables created with consistent schema")
         
         # Create indexes for better performance

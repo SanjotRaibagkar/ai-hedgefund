@@ -26,19 +26,23 @@ def run_options_analysis(index: str = 'NIFTY'):
         
         if options_data is not None and not options_data.empty:
             # Get spot price from futures data (more accurate)
+            current_price = None
             try:
                 futures_data = nse.futures_data(index, indices=True)
                 if futures_data is not None and not futures_data.empty:
                     # Get the first row (current month contract) for spot price
                     current_price = float(futures_data['lastPrice'].iloc[0])
+                    logger.info(f"✅ Using futures data for {index}: ₹{current_price:,.2f}")
                 else:
-                    # Fallback to options data if futures fails
-                    strikes = sorted(options_data['Strike_Price'].unique())
-                    current_price = float(strikes[len(strikes)//2])
+                    logger.warning(f"⚠️ No futures data for {index}, will use options fallback")
             except Exception as e:
-                logger.warning(f"Could not get futures data for {index}, using options fallback: {e}")
+                logger.warning(f"⚠️ Could not get futures data for {index}: {e}")
+            
+            # Fallback to options data if futures fails
+            if current_price is None:
                 strikes = sorted(options_data['Strike_Price'].unique())
                 current_price = float(strikes[len(strikes)//2])
+                logger.warning(f"⚠️ Using options fallback for {index}: ₹{current_price:,.2f}")
             
             atm_strike = min(strikes, key=lambda x: abs(x - current_price))
             
