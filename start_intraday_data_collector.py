@@ -57,8 +57,9 @@ class IntradayDataCollectorRunner:
             
             # Check if current time is within market hours
             if market_start <= current_time <= market_end:
-                # Check if it's a trading day
-                return self.nse.is_nse_trading_day()
+                # Check if it's a trading day (not a holiday)
+                today = datetime.now().strftime('%d-%b-%Y')
+                return not self.nse.is_nse_trading_holiday(today)
             return False
             
         except Exception as e:

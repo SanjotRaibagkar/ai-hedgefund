@@ -157,11 +157,15 @@ class OptionsCollectorBackgroundRunner:
                 try:
                     schedule.run_pending()
                     
-                    # Check collector status every 5 minutes
+                    # Check collector status every minute
                     if self.check_collector_status():
                         logger.debug("✅ Options collector is running")
                     else:
                         logger.debug("ℹ️ Options collector is not running")
+                        # Auto-restart if not running and market is open
+                        if self._is_trading_day() and self.market_open <= datetime.now().strftime('%H:%M') <= self.market_close:
+                            logger.info("🔄 Auto-restarting options collector...")
+                            self.start_collector()
                     
                     time.sleep(60)  # Check every minute
                     

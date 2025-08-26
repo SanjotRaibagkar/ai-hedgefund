@@ -6,7 +6,10 @@ Collects 1-minute interval options chain data and futures spot prices for NIFTY 
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
+# Add the project root to Python path
+project_root = os.path.join(os.path.dirname(__file__), '..', '..', '..')
+sys.path.insert(0, project_root)
 
 import time
 import schedule
@@ -297,14 +300,14 @@ class OptionsChainCollector:
             return False
     
     def start_scheduler(self):
-        """Start the scheduler to collect data every minute during market hours."""
+        """Start the scheduler to collect data every 3 minutes during market hours."""
         logger.info("🚀 Starting Options Chain Data Collector Scheduler")
         logger.info(f"📅 Trading hours: {self.market_open} - {self.market_close} IST")
         logger.info(f"📊 Indices: {', '.join(self.indices)}")
-        logger.info("⏰ Collection interval: 1 minute")
+        logger.info("⏰ Collection interval: 3 minutes")
         
-        # Schedule data collection every minute
-        schedule.every(1).minutes.do(self.collect_all_data)
+        # Schedule data collection every 3 minutes
+        schedule.every(3).minutes.do(self.collect_all_data)
         
         # Run initial collection
         logger.info("📊 Running initial data collection...")
