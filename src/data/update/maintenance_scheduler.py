@@ -14,7 +14,7 @@ import json
 import os
 from pathlib import Path
 
-from .daily_updater import DailyDataUpdater
+from .simple_price_updater import SimplePriceUpdater
 from ..database.duckdb_manager import DatabaseManager
 from ..downloaders.eod_extra_data_downloader import EODExtraDataDownloader
 
@@ -31,7 +31,7 @@ class MaintenanceScheduler:
         """
         self.config_path = config_path
         self.db_manager = DatabaseManager()
-        self.daily_updater = DailyDataUpdater(self.db_manager)
+        self.daily_updater = SimplePriceUpdater()
         self.eod_downloader = EODExtraDataDownloader()
         
         # Load scheduler configuration
@@ -154,7 +154,7 @@ class MaintenanceScheduler:
             yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
             
             # Run daily update
-            asyncio.run(self.daily_updater.run_daily_update(yesterday))
+            self.daily_updater.run_daily_update(yesterday)
             
             logger.info("✅ Daily update completed successfully")
             

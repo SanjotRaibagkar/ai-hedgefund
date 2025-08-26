@@ -98,6 +98,101 @@ class NseUtils:
         data = self.session.get(f'https://www.nseindia.com/api/holiday-master?type={'Clearing'.lower()}',
                                 headers=self.headers).json()
         df = pd.DataFrame(list(data.values())[0])
+    
+    def get_india_vix_data(self):
+        """
+        Get India VIX data from NSE live market indices page
+        Returns:
+            Dictionary with VIX data including current value, change, etc.
+        """
+        try:
+            # Try multiple API endpoints for VIX data
+            
+            # Method 1: Try live-analysis-variations API
+            try:
+                url = "https://www.nseindia.com/market-data/live-market-indices"
+                ref_response = self.session.get(url, headers=self.headers)
+                api_url = "https://www.nseindia.com/api/live-analysis-variations?index=india-vix"
+                response = self.session.get(api_url, headers=self.headers, cookies=ref_response.cookies)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    vix_data = data.get('INDIA VIX', {})
+                    
+                    if vix_data:
+                        current_value = vix_data.get('lastPrice', 0)
+                        change = vix_data.get('pChange', 0)
+                        
+                        return {
+                            'vix': current_value,
+                            'change': change,
+                            'timestamp': datetime.now(),
+                            'source': 'NSE Live Market Indices'
+                        }
+            except Exception as e:
+                print(f"Method 1 failed: {e}")
+            
+            # Method 2: Try equity-stockIndices API directly
+            try:
+                vix_data = self.get_index_details("INDIA VIX")
+                
+                if not vix_data.empty:
+                    # Get the first row (INDIA VIX data)
+                    vix_row = vix_data.iloc[0]
+                    
+                    current_value = vix_row.get('lastPrice', 0)
+                    change = vix_row.get('pChange', 0)
+                    
+                    return {
+                        'vix': current_value,
+                        'change': change,
+                        'timestamp': datetime.now(),
+                        'source': 'NSE Equity Stock Indices'
+                    }
+            except Exception as e:
+                print(f"Method 2 failed: {e}")
+            
+            # Method 3: Try alternative API endpoint
+            try:
+                url = "https://www.nseindia.com/market-data/live-market-indices"
+                ref_response = self.session.get(url, headers=self.headers)
+                api_url = "https://www.nseindia.com/api/equity-stockIndices?index=INDIA%20VIX"
+                response = self.session.get(api_url, headers=self.headers, cookies=ref_response.cookies)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if 'data' in data and len(data['data']) > 0:
+                        vix_row = data['data'][0]
+                        current_value = vix_row.get('lastPrice', 0)
+                        change = vix_row.get('pChange', 0)
+                        
+                        return {
+                            'vix': current_value,
+                            'change': change,
+                            'timestamp': datetime.now(),
+                            'source': 'NSE Direct API'
+                        }
+            except Exception as e:
+                print(f"Method 3 failed: {e}")
+            
+            # If all methods fail, return default
+            return {
+                'vix': 15.0,
+                'change': 0.0,
+                'timestamp': datetime.now(),
+                'source': 'Default Placeholder (All Methods Failed)'
+            }
+                
+        except Exception as e:
+            print(f"Error fetching VIX data: {e}")
+            return {
+                'vix': 15.0,
+                'change': 0.0,
+                'timestamp': datetime.now(),
+                'source': 'Default Placeholder (Error)'
+            }
+    
+
         if list_only:
             holiday_list = df['tradingDate'].tolist()
             return holiday_list
@@ -247,29 +342,44 @@ class NseUtils:
         :param indices:
         :return:
         """
-        symbol = symbol.replace(' ', '%20').replace('&', '%26')
-        if not indices:
-            ref_url = 'https://www.nseindia.com/get-quotes/derivatives?symbol=' + symbol
-            ref = requests.get(ref_url, headers=self.headers)
-            url = 'https://www.nseindia.com/api/option-chain-equities?symbol=' + symbol
-            data = self.session.get(url, headers=self.headers, cookies=ref.cookies.get_dict()).json()["records"]
-        else:
-            ref_url = 'https://www.nseindia.com/get-quotes/derivatives?symbol=' + symbol
-            ref = requests.get(ref_url, headers=self.headers)
-            url = 'https://www.nseindia.com/api/option-chain-indices?symbol=' + symbol
-            data = self.session.get(url, headers=self.headers, cookies=ref.cookies.get_dict()).json()["records"]
+        try:
+            symbol = symbol.replace(' ', '%20').replace('&', '%26')
+            if not indices:
+                ref_url = 'https://www.nseindia.com/get-quotes/derivatives?symbol=' + symbol
+                ref = requests.get(ref_url, headers=self.headers)
+                url = 'https://www.nseindia.com/api/option-chain-equities?symbol=' + symbol
+                response = self.session.get(url, headers=self.headers, cookies=ref.cookies.get_dict())
+                json_data = response.json()
+                data = json_data.get("records", json_data)
+            else:
+                ref_url = 'https://www.nseindia.com/get-quotes/derivatives?symbol=' + symbol
+                ref = requests.get(ref_url, headers=self.headers)
+                url = 'https://www.nseindia.com/api/option-chain-indices?symbol=' + symbol
+                response = self.session.get(url, headers=self.headers, cookies=ref.cookies.get_dict())
+                json_data = response.json()
+                data = json_data.get("records", json_data)
 
-        my_df = []
-        for i in data["data"]:
-            for k, v in i.items():
-                if k == "CE" or k == "PE":
-                    info = v
-                    info["instrumentType"] = k
-                    info["timestamp"] = data["timestamp"]
-                    my_df.append(info)
-        df = pd.DataFrame(my_df)
-        df = df.set_index("identifier", drop=True)
-        return df
+            my_df = []
+            if "data" in data:
+                for i in data["data"]:
+                    for k, v in i.items():
+                        if k == "CE" or k == "PE":
+                            info = v
+                            info["instrumentType"] = k
+                            info["timestamp"] = data.get("timestamp", "")
+                            my_df.append(info)
+            
+            if not my_df:
+                return pd.DataFrame()
+                
+            df = pd.DataFrame(my_df)
+            if "identifier" in df.columns:
+                df = df.set_index("identifier", drop=True)
+            return df
+            
+        except Exception as e:
+            print(f"Error in get_option_chain for {symbol}: {e}")
+            return pd.DataFrame()
 
     def get_52week_high_low(self, stock=None):
         """
