@@ -182,18 +182,91 @@ class FixedEnhancedOptionsAnalyzer:
             return {'signal': 'NEUTRAL', 'confidence': 50.0, 'suggested_trade': 'Error in analysis'}
     
     def _calculate_support_resistance(self, oi_analysis: Dict[str, Any], current_price: float) -> Dict[str, float]:
-        """Calculate support and resistance levels based on OI."""
+        """Calculate support and resistance levels based on OI patterns."""
         try:
-            # For now, return current price as both support and resistance
-            # This can be enhanced later with actual OI-based calculation
+            # Get OI analysis data
+            atm_strike = oi_analysis.get('atm_strike', current_price)
+            analyzed_strikes = oi_analysis.get('analyzed_strikes', [])
+            
+            # Initialize with percentage-based levels as fallback
+            support = current_price * 0.98  # 2% below current price
+            resistance = current_price * 1.02  # 2% above current price
+            
+            # Enhanced OI-based calculation using strike analysis
+            if analyzed_strikes and len(analyzed_strikes) > 0:
+                # Find strikes below current price (potential support levels)
+                support_strikes = [s for s in analyzed_strikes if s < current_price]
+                if support_strikes:
+                    # Use the highest strike below current price as primary support
+                    # This represents where put sellers are most active
+                    support = max(support_strikes)
+                    
+                    # If we have multiple support strikes, use the closest one
+                    if len(support_strikes) > 1:
+                        # Find the strike closest to current price but below it
+                        closest_support = max(support_strikes)
+                        if closest_support > current_price * 0.95:  # Within 5% of current price
+                            support = closest_support
+                
+                # Find strikes above current price (potential resistance levels)
+                resistance_strikes = [s for s in analyzed_strikes if s > current_price]
+                if resistance_strikes:
+                    # Use the lowest strike above current price as primary resistance
+                    # This represents where call buyers are most active
+                    resistance = min(resistance_strikes)
+                    
+                    # If we have multiple resistance strikes, use the closest one
+                    if len(resistance_strikes) > 1:
+                        # Find the strike closest to current price but above it
+                        closest_resistance = min(resistance_strikes)
+                        if closest_resistance < current_price * 1.05:  # Within 5% of current price
+                            resistance = closest_resistance
+            
+            # Additional validation and refinement
+            # Ensure support is not too close to current price (at least 0.5% away)
+            min_support_distance = current_price * 0.995
+            if support > min_support_distance:
+                support = current_price * 0.98
+            
+            # Ensure resistance is not too close to current price (at least 0.5% away)
+            max_resistance_distance = current_price * 1.005
+            if resistance < max_resistance_distance:
+                resistance = current_price * 1.02
+            
+            # Final validation: ensure support is below resistance
+            if support >= resistance:
+                support = current_price * 0.98
+                resistance = current_price * 1.02
+            
+            # Round to 2 decimal places for cleaner display
+            support = round(support, 2)
+            resistance = round(resistance, 2)
+            
+            self.logger.info(f"Enhanced OI-based Support/Resistance calculated:")
+            self.logger.info(f"  Current Price: {current_price:.2f}")
+            self.logger.info(f"  Support Level: {support:.2f} ({(support/current_price-1)*100:.1f}%)")
+            self.logger.info(f"  Resistance Level: {resistance:.2f} ({(resistance/current_price-1)*100:.1f}%)")
+            self.logger.info(f"  Analyzed Strikes: {analyzed_strikes}")
+            
             return {
-                'support': current_price,
-                'resistance': current_price
+                'support': support,
+                'resistance': resistance,
+                'support_distance_pct': round((support/current_price - 1) * 100, 1),
+                'resistance_distance_pct': round((resistance/current_price - 1) * 100, 1)
             }
             
         except Exception as e:
             self.logger.error(f"Error calculating support/resistance: {e}")
-            return {'support': current_price, 'resistance': current_price}
+            # Fallback to percentage-based levels
+            fallback_support = round(current_price * 0.98, 2)
+            fallback_resistance = round(current_price * 1.02, 2)
+            
+            return {
+                'support': fallback_support,
+                'resistance': fallback_resistance,
+                'support_distance_pct': -2.0,
+                'resistance_distance_pct': 2.0
+            }
     
     def analyze_index_options(self, index: str = 'NIFTY') -> Dict[str, Any]:
         """
@@ -273,6 +346,8 @@ class FixedEnhancedOptionsAnalyzer:
                 'suggested_trade': result['signal']['suggested_trade'],
                 'strongest_support': result['support_resistance']['support'],
                 'strongest_resistance': result['support_resistance']['resistance'],
+                'support_distance_pct': result['support_resistance']['support_distance_pct'],
+                'resistance_distance_pct': result['support_resistance']['resistance_distance_pct'],
                 'atm_call_oi': result['oi_analysis']['atm_call_oi'],
                 'atm_put_oi': result['oi_analysis']['atm_put_oi'],
                 'atm_call_oi_change': result['oi_analysis']['atm_call_oi_change'],

@@ -381,8 +381,6 @@ def run_options_analysis(n_clicks):
         
         return content
         
-        return content
-        
     except Exception as e:
         return html.Div([
             html.H5("❌ Error occurred during options analysis"),

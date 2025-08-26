@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Intraday Data Collection Background Runner
+Fixed Intraday Data Collection Background Runner
 Automatically collects intraday ML data every 15 minutes during market hours.
+Prevents multiple instances and properly manages processes.
 """
 
 import sys
@@ -21,8 +22,8 @@ sys.path.append('./src')
 from nsedata.NseUtility import NseUtils
 
 
-class IntradayDataCollectorRunner:
-    """Background runner for intraday data collection."""
+class FixedIntradayDataCollectorRunner:
+    """Fixed background runner for intraday data collection."""
     
     def __init__(self):
         """Initialize the background runner."""
@@ -46,7 +47,7 @@ class IntradayDataCollectorRunner:
             format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | <cyan>{message}</cyan>"
         )
         
-        logger.info("🚀 Intraday Data Collection Background Runner initialized")
+        logger.info("🚀 Fixed Intraday Data Collection Background Runner initialized")
     
     def is_market_open(self) -> bool:
         """Check if market is currently open."""
@@ -66,12 +67,41 @@ class IntradayDataCollectorRunner:
             logger.error(f"❌ Error checking market status: {e}")
             return False
     
+    def find_existing_intraday_processes(self):
+        """Find existing intraday data collector processes."""
+        existing_pids = []
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['cmdline'] and any('start_intraday_data_collector' in cmd for cmd in proc.info['cmdline']):
+                    if proc.info['pid'] != os.getpid():  # Don't include current process
+                        existing_pids.append(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        return existing_pids
+    
+    def kill_existing_processes(self):
+        """Kill any existing intraday data collector processes."""
+        existing_pids = self.find_existing_intraday_processes()
+        if existing_pids:
+            logger.info(f"🔄 Found {len(existing_pids)} existing intraday processes, killing them...")
+            for pid in existing_pids:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    logger.info(f"✅ Killed existing process PID: {pid}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to kill process {pid}: {e}")
+            time.sleep(2)  # Wait for processes to terminate
+    
     def start_data_collector(self):
         """Start the intraday data collection process."""
         try:
+            # Check if process is already running
             if self.data_collector_process and self.data_collector_process.poll() is None:
                 logger.info("ℹ️ Intraday data collector is already running")
                 return
+            
+            # Check for existing processes and kill them
+            self.kill_existing_processes()
             
             # Start the data collection script
             cmd = [
@@ -129,6 +159,9 @@ class IntradayDataCollectorRunner:
     def schedule_daily_runs(self):
         """Schedule daily start and stop times."""
         try:
+            # Clear any existing schedules
+            schedule.clear()
+            
             # Schedule to start at 9:30 AM IST
             schedule.every().day.at("09:30").do(self.start_data_collector)
             
@@ -157,6 +190,9 @@ class IntradayDataCollectorRunner:
         """Run the background scheduler."""
         try:
             logger.info("🔄 Starting background scheduler...")
+            
+            # Kill any existing processes first
+            self.kill_existing_processes()
             
             # Schedule daily runs
             self.schedule_daily_runs()
@@ -199,11 +235,12 @@ class IntradayDataCollectorRunner:
 
 def main():
     """Main function."""
-    print("🚀 Intraday Data Collection Background Runner")
+    print("🚀 Fixed Intraday Data Collection Background Runner")
     print("="*60)
     print("📅 Trading hours: 09:30 - 15:30 IST")
     print("📊 Auto-start/stop daily")
     print("⏰ Collection interval: Every 15 minutes")
+    print("🔒 Prevents multiple instances")
     print("📝 Logs: logs/intraday_data_collection_background.log")
     print("="*60)
     
@@ -215,7 +252,7 @@ def main():
     
     try:
         # Initialize and run the background scheduler
-        runner = IntradayDataCollectorRunner()
+        runner = FixedIntradayDataCollectorRunner()
         runner.run_background_scheduler()
         
     except KeyboardInterrupt:
