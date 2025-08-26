@@ -1,0 +1,1201 @@
+PRICE_DATA TABLE USAGE REPORT
+==================================================
+
+SUMMARY
+--------------------
+Files using price_data: 35
+Functions: 10
+Classes: 0
+
+SQL OPERATIONS
+--------------------
+
+SELECT Operations (52):
+  src/data\enhanced_indian_data_manager.py:319
+    "SELECT MAX(date) FROM price_data WHERE symbol = ?",
+
+  src/data\enhanced_indian_data_manager.py:421
+    SELECT DISTINCT symbol FROM price_data
+
+  src/data\enhanced_indian_data_manager.py:499
+    query = "SELECT * FROM price_data WHERE symbol = ?"
+
+  src/data\enhanced_indian_data_manager.py:547
+    "SELECT COUNT(DISTINCT symbol) FROM price_data"
+
+  src/data\enhanced_indian_data_manager.py:551
+    "SELECT COUNT(*) FROM price_data"
+
+  src/data\enhanced_indian_data_manager.py:555
+    "SELECT MIN(date), MAX(date) FROM price_data"
+
+  src/data\database\duckdb_manager.py:419
+    query = "SELECT * FROM price_data WHERE symbol = ?"
+
+  src/data\database\duckdb_manager.py:444
+    query = "SELECT DISTINCT symbol FROM price_data ORDER BY symbol"
+
+  src/data\downloaders\optimized_equity_downloader.py:417
+    total_records = self.conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
+
+  src/data\downloaders\optimized_equity_downloader.py:418
+    unique_symbols = self.conn.execute("SELECT COUNT(DISTINCT symbol) FROM price_data").fetchone()[0]
+
+  src/data\downloaders\optimized_equity_downloader.py:478
+    result = self.conn.execute("SELECT MAX(date) FROM price_data").fetchone()
+
+  src/data\downloaders\optimized_equity_downloader.py:488
+    "SELECT MAX(date) FROM price_data WHERE symbol = ?",
+
+  src/data\downloaders\optimized_equity_downloader.py:568
+    SELECT DISTINCT symbol FROM price_data
+
+  src/data\downloaders\optimized_equity_downloader.py:628
+    SELECT COUNT(*) FROM price_data WHERE symbol = ?
+
+  src/data\providers\database_provider.py:54
+    count = conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
+
+  src/data\providers\database_provider.py:233
+    query = "SELECT DISTINCT symbol FROM price_data ORDER BY symbol"
+
+  src/data\providers\duckdb_provider.py:135
+    query = "SELECT DISTINCT symbol FROM price_data ORDER BY symbol"
+
+  src/data\providers\duckdb_provider.py:148
+    query = "SELECT COUNT(DISTINCT symbol) as count FROM price_data"
+
+  src/data\providers\duckdb_provider.py:159
+    query = "SELECT MIN(date) as start_date, MAX(date) as end_date FROM price_data"
+
+  src/data\update\simple_price_updater.py:39
+    symbols = self.conn.execute("SELECT DISTINCT symbol FROM price_data").fetchdf()
+
+  src/data\update\simple_price_updater.py:49
+    "SELECT MAX(date) as latest_date FROM price_data WHERE symbol = ?",
+
+  src/data\update\simple_price_updater.py:66
+    "SELECT date FROM price_data WHERE symbol = ? AND date BETWEEN ? AND ?",
+
+  src/data\update\simple_price_updater.py:267
+    "SELECT COUNT(*) FROM price_data WHERE symbol = ? AND date = ?",
+
+  src/screening\duckdb_eod_screener.py:83
+    "SELECT DISTINCT symbol FROM price_data"
+
+  src/screening\duckdb_eod_screener.py:178
+    SELECT * FROM price_data
+
+  src/screening\enhanced_eod_screener.py:154
+    SELECT * FROM price_data
+
+  src/screening\simple_eod_screener.py:82
+    "SELECT DISTINCT symbol FROM price_data"
+
+  src/screening\simple_eod_screener.py:174
+    SELECT * FROM price_data
+
+  src/screening\unified_eod_screener.py:109
+    "SELECT DISTINCT symbol FROM price_data"
+
+  src/screening\unified_eod_screener.py:212
+    SELECT * FROM price_data
+
+  tests/final_comprehensive_test.py:94
+    symbols_with_data = conn.execute("SELECT DISTINCT symbol FROM price_data WHERE close_price > 0").fetchall()
+
+  tests/final_comprehensive_test.py:101
+    SELECT close_price FROM price_data
+
+  tests/final_comprehensive_test.py:197
+    total_records = conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
+
+  tests/final_comprehensive_test.py:198
+    unique_symbols = conn.execute("SELECT COUNT(DISTINCT symbol) FROM price_data").fetchone()[0]
+
+  tests/final_comprehensive_test.py:199
+    latest_date = conn.execute("SELECT MAX(date) FROM price_data").fetchone()[0]
+
+  tests/optimized_test.py:65
+    symbols_with_data = conn.execute("SELECT DISTINCT symbol FROM price_data WHERE close_price > 0").fetchall()
+
+  tests/optimized_test.py:71
+    prices = conn.execute("SELECT close_price FROM price_data WHERE symbol = ? ORDER BY date DESC LIMIT 5", (symbol,)).fetchall()
+
+  tests/test_download.py:58
+    symbols_with_data = conn.execute("SELECT DISTINCT symbol FROM price_data WHERE close_price > 0").fetchall()
+
+  tests/test_download.py:64
+    prices = conn.execute("SELECT close_price FROM price_data WHERE symbol = ? ORDER BY date DESC LIMIT 5", (symbol,)).fetchall()
+
+  tests/test_duckdb_screener.py:19
+    acc_data = conn.execute("SELECT * FROM price_data WHERE symbol = 'ACC' ORDER BY date DESC LIMIT 5").fetchall()
+
+  tests/test_enhanced_eod_system.py:314
+    "SELECT MAX(date) FROM price_data WHERE symbol = ?",
+
+  tests/test_enhanced_eod_system.py:354
+    SELECT COUNT(*) FROM price_data WHERE symbol = ?
+
+  tests/test_enhanced_eod_system.py:495
+    query = "SELECT * FROM price_data WHERE symbol = ?"
+
+  tests/test_enhanced_eod_system.py:547
+    "SELECT COUNT(*) FROM price_data"
+
+  tests/test_enhanced_eod_system.py:551
+    "SELECT MIN(date), MAX(date) FROM price_data"
+
+  tests/test_screening_database_only.py:22
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_screening_simple.py:26
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_screening_simple.py:104
+    price_count = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_screening_with_comprehensive_data.py:28
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_ui_with_comprehensive_data.py:39
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_ui_with_comprehensive_data.py:190
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_ui_with_comprehensive_data.py:193
+    date_range = conn.execute('SELECT MIN(date), MAX(date) FROM price_data').fetchone()
+
+
+INSERT Operations (3):
+  src/data\downloaders\optimized_equity_downloader.py:622
+    self.conn.execute("INSERT INTO price_data SELECT * FROM df")
+
+  src/data\update\simple_price_updater.py:189
+    INSERT INTO price_data (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
+
+  src/data\update\simple_price_updater.py:274
+    INSERT INTO price_data (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
+
+
+DELETE Operations (2):
+  src/data\downloaders\optimized_equity_downloader.py:617
+    "DELETE FROM price_data WHERE symbol = ? AND date BETWEEN ? AND ?",
+
+  src/data\update\maintenance_scheduler.py:389
+    DELETE FROM price_data
+
+
+CREATE Operations (19):
+  src/data\downloaders\optimized_equity_downloader.py:73
+    # Create price_data table with optimized schema
+
+  src/data\downloaders\optimized_equity_downloader.py:75
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  src/data\downloaders\optimized_equity_downloader.py:90
+    self.conn.execute('CREATE INDEX IF NOT EXISTS idx_symbol_date ON price_data(symbol, date)')
+
+  src/data\downloaders\optimized_equity_downloader.py:91
+    self.conn.execute('CREATE INDEX IF NOT EXISTS idx_symbol ON price_data(symbol)')
+
+  src/data\downloaders\optimized_equity_downloader.py:92
+    self.conn.execute('CREATE INDEX IF NOT EXISTS idx_date ON price_data(date)')
+
+  src/ml\enhanced_options_ml_integration.py:67
+    features = self._create_features_from_prices(price_data)
+
+  src/ml\enhanced_options_ml_integration.py:87
+    def _create_features_from_prices(self, price_data: pd.DataFrame) -> pd.DataFrame:
+
+  src/ml\enhanced_options_ml_integration.py:338
+    return self._create_features_from_prices(price_data)
+
+  tests/final_comprehensive_test.py:23
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/optimized_test.py:21
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/test_download.py:19
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/test_enhanced_eod_system.py:64
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/test_enhanced_eod_system.py:91
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_date ON price_data(symbol, date)")
+
+  tests/test_enhanced_eod_system.py:92
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol ON price_data(symbol)")
+
+  tests/test_enhanced_eod_system.py:93
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON price_data(date)")
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:70
+    CREATE TABLE price_data (
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:85
+    CREATE INDEX idx_symbol_date ON price_data(symbol, date);
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:86
+    CREATE INDEX idx_symbol ON price_data(symbol);
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:87
+    CREATE INDEX idx_date ON price_data(date);
+
+FUNCTION CALLS
+--------------------
+  src/backtester.py:18
+    get_price_data,
+
+  src/backtester.py:322
+    price_data = get_price_data(ticker, previous_date_str, current_date_str)
+
+  src/backtester.py:323
+    if price_data.empty:
+
+  src/backtester.py:327
+    current_prices[ticker] = price_data.iloc[-1]["close"]
+
+  src/data\enhanced_indian_data_manager.py:493
+    async def get_price_data(self, symbol: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+
+  src/data\collectors\technical_collector.py:46
+    price_data = self._get_price_data(ticker, start_date, end_date)
+
+  src/data\collectors\technical_collector.py:47
+    if price_data is None or price_data.empty:
+
+  src/data\collectors\technical_collector.py:66
+    def _get_price_data(self, ticker: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+
+  src/data\database\duckdb_manager.py:415
+    def get_price_data(self, ticker: str, start_date: Optional[str] = None,
+
+  src/data\downloaders\optimized_equity_downloader.py:227
+    price_data = []
+
+  src/data\downloaders\optimized_equity_downloader.py:250
+    price_data.append((
+
+  src/data\providers\commodity_provider.py:268
+    price_data = CommodityPrice(
+
+  src/data\providers\forex_provider.py:257
+    price_data = ForexPrice(
+
+  src/data\update\missing_data_filler.py:208
+    price_data = self._interpolate_price_data(existing_df, missing_dates)
+
+  src/ml\enhanced_options_ml_integration.py:63
+    price_data = get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+
+  src/ml\enhanced_options_ml_integration.py:65
+    if price_data is not None and not price_data.empty:
+
+  src/ml\enhanced_options_ml_integration.py:70
+    price_data['next_day_return'] = price_data['close_price'].shift(-1) / price_data['close_price'] - 1
+
+  src/ml\enhanced_options_ml_integration.py:71
+    target = price_data['next_day_return'].dropna()
+
+  src/ml\enhanced_options_ml_integration.py:93
+    features['close_price'] = price_data['close_price']
+
+  src/ml\enhanced_options_ml_integration.py:94
+    features['volume'] = price_data['volume']
+
+  src/ml\enhanced_options_ml_integration.py:97
+    features['sma_5'] = price_data['close_price'].rolling(5).mean()
+
+  src/ml\enhanced_options_ml_integration.py:98
+    features['sma_20'] = price_data['close_price'].rolling(20).mean()
+
+  src/ml\enhanced_options_ml_integration.py:99
+    features['rsi'] = self._calculate_rsi(price_data['close_price'])
+
+  src/ml\enhanced_options_ml_integration.py:100
+    features['volatility'] = price_data['close_price'].pct_change().rolling(10).std()
+
+  src/ml\enhanced_options_ml_integration.py:103
+    features['price_momentum_1d'] = price_data['close_price'].pct_change(1)
+
+  src/ml\enhanced_options_ml_integration.py:104
+    features['price_momentum_5d'] = price_data['close_price'].pct_change(5)
+
+  src/ml\enhanced_options_ml_integration.py:105
+    features['volume_momentum'] = price_data['volume'].pct_change(5)
+
+  src/ml\enhanced_options_ml_integration.py:335
+    price_data = get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+
+  src/ml\enhanced_options_ml_integration.py:337
+    if price_data is not None and not price_data.empty:
+
+  src/ml\enhanced_options_ml_integration.py:354
+    price_data = get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+
+  src/ml\enhanced_options_ml_integration.py:356
+    if price_data is not None and not price_data.empty:
+
+  src/ml\enhanced_options_ml_integration.py:358
+    recent_prices = price_data['close_price'].tail(5)
+
+  src/tools\api.py:339
+    # Update the get_price_data function to use the new functions
+
+  src/tools\api.py:340
+    def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
+
+  app/backend\services\backtest_service.py:10
+    get_price_data,
+
+  app/backend\services\backtest_service.py:336
+    price_data = get_price_data(ticker, previous_date_str, current_date_str)
+
+  app/backend\services\backtest_service.py:337
+    if price_data.empty:
+
+  app/backend\services\backtest_service.py:340
+    current_prices[ticker] = price_data.iloc[-1]["close"]
+
+  tests/demo_indian_stocks_working.py:40
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/demo_indian_stocks_working.py:42
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/demo_indian_stocks_working.py:43
+    latest = price_data.iloc[-1]
+
+  tests/demo_intraday_screener_working.py:46
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/demo_intraday_screener_working.py:48
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/demo_intraday_screener_working.py:52
+    current_price = price_data['close_price'].iloc[-1]
+
+  tests/test_enhanced_eod_system.py:489
+    async def get_price_data(self, symbol: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+
+  tests/test_enhanced_eod_system.py:633
+    data = await system.get_price_data(test_symbol)
+
+  tests/test_indian_stocks_phase5.py:44
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_indian_stocks_phase5.py:50
+    elif hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_indian_stocks_phase5.py:119
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_indian_stocks_phase5.py:125
+    logger.info(f"   📊 Sample data: {price_data[0]}")
+
+  tests/test_indian_stocks_phase5.py:128
+    if not price_data.empty:
+
+  tests/test_indian_stocks_phase5.py:129
+    logger.info(f"   📊 Columns: {list(price_data.columns)}")
+
+  tests/test_indian_stocks_phase5.py:130
+    logger.info(f"   📊 Sample: {price_data.head(1).to_dict()}")
+
+  tests/test_indian_stocks_phase5.py:202
+    price_data = get_prices(test_stock, start_date, end_date)
+
+  tests/test_indian_stocks_phase5.py:208
+    sample = price_data[0]
+
+  tests/test_indian_stocks_phase5.py:228
+    logger.info(f"Columns: {list(price_data.columns)}")
+
+  tests/test_intraday_screener.py:47
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:49
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:136
+    price_data = get_prices(test_stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:138
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:197
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:199
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:257
+    price_data = get_prices(test_stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:259
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:260
+    current_price = price_data['close_price'].iloc[-1]
+
+TABLE REFERENCES
+--------------------
+  src/backtester.py:18
+    get_price_data,
+
+  src/backtester.py:322
+    price_data = get_price_data(ticker, previous_date_str, current_date_str)
+
+  src/backtester.py:323
+    if price_data.empty:
+
+  src/backtester.py:327
+    current_prices[ticker] = price_data.iloc[-1]["close"]
+
+  src/data\enhanced_indian_data_manager.py:155
+    # The price_data table is now the source of truth for symbol data
+
+  src/data\enhanced_indian_data_manager.py:156
+    logger.info(f"ℹ️ Securities table removed - using price_data as source of truth")
+
+  src/data\enhanced_indian_data_manager.py:319
+    "SELECT MAX(date) FROM price_data WHERE symbol = ?",
+
+  src/data\enhanced_indian_data_manager.py:335
+    INSERT OR REPLACE INTO price_data
+
+  src/data\enhanced_indian_data_manager.py:355
+    # The price_data table is the source of truth for symbol data
+
+  src/data\enhanced_indian_data_manager.py:421
+    SELECT DISTINCT symbol FROM price_data
+
+  src/data\enhanced_indian_data_manager.py:493
+    async def get_price_data(self, symbol: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+
+  src/data\enhanced_indian_data_manager.py:499
+    query = "SELECT * FROM price_data WHERE symbol = ?"
+
+  src/data\enhanced_indian_data_manager.py:545
+    # Get total symbols from price_data (since securities table was removed)
+
+  src/data\enhanced_indian_data_manager.py:547
+    "SELECT COUNT(DISTINCT symbol) FROM price_data"
+
+  src/data\enhanced_indian_data_manager.py:551
+    "SELECT COUNT(*) FROM price_data"
+
+  src/data\enhanced_indian_data_manager.py:555
+    "SELECT MIN(date), MAX(date) FROM price_data"
+
+  src/data\collectors\technical_collector.py:46
+    price_data = self._get_price_data(ticker, start_date, end_date)
+
+  src/data\collectors\technical_collector.py:47
+    if price_data is None or price_data.empty:
+
+  src/data\collectors\technical_collector.py:52
+    technical_data = self._calculate_indicators(price_data)
+
+  src/data\collectors\technical_collector.py:66
+    def _get_price_data(self, ticker: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+
+  src/data\database\duckdb_manager.py:67
+    # Technical Data Table with foreign key to price_data
+
+  src/data\database\duckdb_manager.py:92
+    FOREIGN KEY (ticker, trade_date) REFERENCES price_data(symbol, date)
+
+  src/data\database\duckdb_manager.py:96
+    # Fundamental Data Table with foreign key to price_data
+
+  src/data\database\duckdb_manager.py:121
+    FOREIGN KEY (ticker, report_date) REFERENCES price_data(symbol, date)
+
+  src/data\database\duckdb_manager.py:125
+    # Market Data Table with foreign key to price_data
+
+  src/data\database\duckdb_manager.py:143
+    FOREIGN KEY (ticker, market_date) REFERENCES price_data(symbol, date)
+
+  src/data\database\duckdb_manager.py:147
+    # Corporate Actions Table with foreign key to price_data
+
+  src/data\database\duckdb_manager.py:162
+    FOREIGN KEY (ticker, action_date) REFERENCES price_data(symbol, date)
+
+  src/data\database\duckdb_manager.py:415
+    def get_price_data(self, ticker: str, start_date: Optional[str] = None,
+
+  src/data\database\duckdb_manager.py:417
+    """Retrieve price data from the master price_data table."""
+
+  src/data\database\duckdb_manager.py:419
+    query = "SELECT * FROM price_data WHERE symbol = ?"
+
+  src/data\database\duckdb_manager.py:442
+    """Get list of all available symbols in price_data table."""
+
+  src/data\database\duckdb_manager.py:444
+    query = "SELECT DISTINCT symbol FROM price_data ORDER BY symbol"
+
+  src/data\downloaders\optimized_equity_downloader.py:73
+    # Create price_data table with optimized schema
+
+  src/data\downloaders\optimized_equity_downloader.py:75
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  src/data\downloaders\optimized_equity_downloader.py:90
+    self.conn.execute('CREATE INDEX IF NOT EXISTS idx_symbol_date ON price_data(symbol, date)')
+
+  src/data\downloaders\optimized_equity_downloader.py:91
+    self.conn.execute('CREATE INDEX IF NOT EXISTS idx_symbol ON price_data(symbol)')
+
+  src/data\downloaders\optimized_equity_downloader.py:92
+    self.conn.execute('CREATE INDEX IF NOT EXISTS idx_date ON price_data(date)')
+
+  src/data\downloaders\optimized_equity_downloader.py:227
+    price_data = []
+
+  src/data\downloaders\optimized_equity_downloader.py:250
+    price_data.append((
+
+  src/data\downloaders\optimized_equity_downloader.py:272
+    if price_data:
+
+  src/data\downloaders\optimized_equity_downloader.py:274
+    INSERT OR REPLACE INTO price_data
+
+  src/data\downloaders\optimized_equity_downloader.py:278
+    ''', price_data)
+
+  src/data\downloaders\optimized_equity_downloader.py:417
+    total_records = self.conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
+
+  src/data\downloaders\optimized_equity_downloader.py:418
+    unique_symbols = self.conn.execute("SELECT COUNT(DISTINCT symbol) FROM price_data").fetchone()[0]
+
+  src/data\downloaders\optimized_equity_downloader.py:423
+    FROM price_data
+
+  src/data\downloaders\optimized_equity_downloader.py:430
+    FROM price_data
+
+  src/data\downloaders\optimized_equity_downloader.py:478
+    result = self.conn.execute("SELECT MAX(date) FROM price_data").fetchone()
+
+  src/data\downloaders\optimized_equity_downloader.py:488
+    "SELECT MAX(date) FROM price_data WHERE symbol = ?",
+
+  src/data\downloaders\optimized_equity_downloader.py:553
+    FROM price_data
+
+  src/data\downloaders\optimized_equity_downloader.py:568
+    SELECT DISTINCT symbol FROM price_data
+
+  src/data\downloaders\optimized_equity_downloader.py:617
+    "DELETE FROM price_data WHERE symbol = ? AND date BETWEEN ? AND ?",
+
+  src/data\downloaders\optimized_equity_downloader.py:622
+    self.conn.execute("INSERT INTO price_data SELECT * FROM df")
+
+  src/data\downloaders\optimized_equity_downloader.py:628
+    SELECT COUNT(*) FROM price_data WHERE symbol = ?
+
+  src/data\providers\commodity_provider.py:268
+    price_data = CommodityPrice(
+
+  src/data\providers\commodity_provider.py:277
+    prices.append(price_data)
+
+  src/data\providers\database_provider.py:44
+    # Check if price_data table exists
+
+  src/data\providers\database_provider.py:52
+    if 'price_data' in table_names:
+
+  src/data\providers\database_provider.py:54
+    count = conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
+
+  src/data\providers\database_provider.py:63
+    raise ValueError("No valid databases found with price_data table")
+
+  src/data\providers\database_provider.py:85
+    FROM price_data
+
+  src/data\providers\database_provider.py:132
+    FROM price_data
+
+  src/data\providers\database_provider.py:233
+    query = "SELECT DISTINCT symbol FROM price_data ORDER BY symbol"
+
+  src/data\providers\database_provider.py:266
+    FROM price_data
+
+  src/data\providers\database_provider.py:269
+    stats['price_data'] = {
+
+  src/data\providers\duckdb_provider.py:58
+    FROM price_data
+
+  src/data\providers\duckdb_provider.py:103
+    FROM price_data
+
+  src/data\providers\duckdb_provider.py:135
+    query = "SELECT DISTINCT symbol FROM price_data ORDER BY symbol"
+
+  src/data\providers\duckdb_provider.py:148
+    query = "SELECT COUNT(DISTINCT symbol) as count FROM price_data"
+
+  src/data\providers\duckdb_provider.py:159
+    query = "SELECT MIN(date) as start_date, MAX(date) as end_date FROM price_data"
+
+  src/data\providers\forex_provider.py:257
+    price_data = ForexPrice(
+
+  src/data\providers\forex_provider.py:266
+    prices.append(price_data)
+
+  src/data\update\maintenance_scheduler.py:389
+    DELETE FROM price_data
+
+  src/data\update\missing_data_filler.py:34
+    'price': self._interpolate_price_data,
+
+  src/data\update\missing_data_filler.py:208
+    price_data = self._interpolate_price_data(existing_df, missing_dates)
+
+  src/data\update\missing_data_filler.py:209
+    if price_data:
+
+  src/data\update\missing_data_filler.py:210
+    interpolated_data.extend(price_data)
+
+  src/data\update\missing_data_filler.py:211
+    filled_records += len(price_data)
+
+  src/data\update\missing_data_filler.py:319
+    def _interpolate_price_data(self, df: pd.DataFrame, missing_dates: List[str]) -> List[Dict[str, Any]]:
+
+  src/data\update\simple_price_updater.py:37
+    """Get all symbols from price_data table."""
+
+  src/data\update\simple_price_updater.py:39
+    symbols = self.conn.execute("SELECT DISTINCT symbol FROM price_data").fetchdf()
+
+  src/data\update\simple_price_updater.py:46
+    """Get the latest date for a symbol in price_data table."""
+
+  src/data\update\simple_price_updater.py:49
+    "SELECT MAX(date) as latest_date FROM price_data WHERE symbol = ?",
+
+  src/data\update\simple_price_updater.py:66
+    "SELECT date FROM price_data WHERE symbol = ? AND date BETWEEN ? AND ?",
+
+  src/data\update\simple_price_updater.py:189
+    INSERT INTO price_data (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
+
+  src/data\update\simple_price_updater.py:267
+    "SELECT COUNT(*) FROM price_data WHERE symbol = ? AND date = ?",
+
+  src/data\update\simple_price_updater.py:274
+    INSERT INTO price_data (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
+
+  src/ml\enhanced_options_ml_integration.py:63
+    price_data = get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+
+  src/ml\enhanced_options_ml_integration.py:65
+    if price_data is not None and not price_data.empty:
+
+  src/ml\enhanced_options_ml_integration.py:67
+    features = self._create_features_from_prices(price_data)
+
+  src/ml\enhanced_options_ml_integration.py:70
+    price_data['next_day_return'] = price_data['close_price'].shift(-1) / price_data['close_price'] - 1
+
+  src/ml\enhanced_options_ml_integration.py:71
+    target = price_data['next_day_return'].dropna()
+
+  src/ml\enhanced_options_ml_integration.py:87
+    def _create_features_from_prices(self, price_data: pd.DataFrame) -> pd.DataFrame:
+
+  src/ml\enhanced_options_ml_integration.py:93
+    features['close_price'] = price_data['close_price']
+
+  src/ml\enhanced_options_ml_integration.py:94
+    features['volume'] = price_data['volume']
+
+  src/ml\enhanced_options_ml_integration.py:97
+    features['sma_5'] = price_data['close_price'].rolling(5).mean()
+
+  src/ml\enhanced_options_ml_integration.py:98
+    features['sma_20'] = price_data['close_price'].rolling(20).mean()
+
+  src/ml\enhanced_options_ml_integration.py:99
+    features['rsi'] = self._calculate_rsi(price_data['close_price'])
+
+  src/ml\enhanced_options_ml_integration.py:100
+    features['volatility'] = price_data['close_price'].pct_change().rolling(10).std()
+
+  src/ml\enhanced_options_ml_integration.py:103
+    features['price_momentum_1d'] = price_data['close_price'].pct_change(1)
+
+  src/ml\enhanced_options_ml_integration.py:104
+    features['price_momentum_5d'] = price_data['close_price'].pct_change(5)
+
+  src/ml\enhanced_options_ml_integration.py:105
+    features['volume_momentum'] = price_data['volume'].pct_change(5)
+
+  src/ml\enhanced_options_ml_integration.py:335
+    price_data = get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+
+  src/ml\enhanced_options_ml_integration.py:337
+    if price_data is not None and not price_data.empty:
+
+  src/ml\enhanced_options_ml_integration.py:338
+    return self._create_features_from_prices(price_data)
+
+  src/ml\enhanced_options_ml_integration.py:354
+    price_data = get_prices(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+
+  src/ml\enhanced_options_ml_integration.py:356
+    if price_data is not None and not price_data.empty:
+
+  src/ml\enhanced_options_ml_integration.py:358
+    recent_prices = price_data['close_price'].tail(5)
+
+  src/screening\duckdb_eod_screener.py:83
+    "SELECT DISTINCT symbol FROM price_data"
+
+  src/screening\duckdb_eod_screener.py:178
+    SELECT * FROM price_data
+
+  src/screening\enhanced_eod_screener.py:105
+    # Note: Securities table was removed, using price_data instead
+
+  src/screening\enhanced_eod_screener.py:154
+    SELECT * FROM price_data
+
+  src/screening\simple_eod_screener.py:82
+    "SELECT DISTINCT symbol FROM price_data"
+
+  src/screening\simple_eod_screener.py:174
+    SELECT * FROM price_data
+
+  src/screening\unified_eod_screener.py:109
+    "SELECT DISTINCT symbol FROM price_data"
+
+  src/screening\unified_eod_screener.py:212
+    SELECT * FROM price_data
+
+  src/tools\api.py:339
+    # Update the get_price_data function to use the new functions
+
+  src/tools\api.py:340
+    def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
+
+  src/utils\database_stats_utility.py:58
+    # If it's a price_data table, get detailed statistics
+
+  src/utils\database_stats_utility.py:59
+    if table_name == 'price_data':
+
+  src/utils\database_stats_utility.py:60
+    analyze_price_data(conn, table_name)
+
+  src/utils\database_stats_utility.py:67
+    def analyze_price_data(conn, table_name):
+
+  src/utils\database_stats_utility.py:180
+    FROM price_data
+
+  app/backend\services\backtest_service.py:10
+    get_price_data,
+
+  app/backend\services\backtest_service.py:336
+    price_data = get_price_data(ticker, previous_date_str, current_date_str)
+
+  app/backend\services\backtest_service.py:337
+    if price_data.empty:
+
+  app/backend\services\backtest_service.py:340
+    current_prices[ticker] = price_data.iloc[-1]["close"]
+
+  tests/demo_indian_stocks_working.py:40
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/demo_indian_stocks_working.py:42
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/demo_indian_stocks_working.py:43
+    latest = price_data.iloc[-1]
+
+  tests/demo_intraday_screener_working.py:46
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/demo_intraday_screener_working.py:48
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/demo_intraday_screener_working.py:49
+    logger.info(f"   ✅ Data available: {len(price_data)} records")
+
+  tests/demo_intraday_screener_working.py:52
+    current_price = price_data['close_price'].iloc[-1]
+
+  tests/demo_intraday_screener_working.py:57
+    atr = screener._calculate_atr(price_data)
+
+  tests/demo_intraday_screener_working.py:64
+    levels = screener._get_support_resistance_levels(price_data)
+
+  tests/final_comprehensive_test.py:23
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/final_comprehensive_test.py:55
+    conn.execute('INSERT OR REPLACE INTO price_data VALUES (?, ?, ?)',
+
+  tests/final_comprehensive_test.py:84
+    conn.execute('INSERT OR REPLACE INTO price_data VALUES (?, ?, ?)',
+
+  tests/final_comprehensive_test.py:94
+    symbols_with_data = conn.execute("SELECT DISTINCT symbol FROM price_data WHERE close_price > 0").fetchall()
+
+  tests/final_comprehensive_test.py:101
+    SELECT close_price FROM price_data
+
+  tests/final_comprehensive_test.py:197
+    total_records = conn.execute("SELECT COUNT(*) FROM price_data").fetchone()[0]
+
+  tests/final_comprehensive_test.py:198
+    unique_symbols = conn.execute("SELECT COUNT(DISTINCT symbol) FROM price_data").fetchone()[0]
+
+  tests/final_comprehensive_test.py:199
+    latest_date = conn.execute("SELECT MAX(date) FROM price_data").fetchone()[0]
+
+  tests/optimized_test.py:21
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/optimized_test.py:48
+    conn.execute('INSERT OR REPLACE INTO price_data VALUES (?, ?, ?)',
+
+  tests/optimized_test.py:65
+    symbols_with_data = conn.execute("SELECT DISTINCT symbol FROM price_data WHERE close_price > 0").fetchall()
+
+  tests/optimized_test.py:71
+    prices = conn.execute("SELECT close_price FROM price_data WHERE symbol = ? ORDER BY date DESC LIMIT 5", (symbol,)).fetchall()
+
+  tests/test_download.py:19
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/test_download.py:42
+    conn.execute('INSERT OR REPLACE INTO price_data VALUES (?, ?, ?)',
+
+  tests/test_download.py:58
+    symbols_with_data = conn.execute("SELECT DISTINCT symbol FROM price_data WHERE close_price > 0").fetchall()
+
+  tests/test_download.py:64
+    prices = conn.execute("SELECT close_price FROM price_data WHERE symbol = ? ORDER BY date DESC LIMIT 5", (symbol,)).fetchall()
+
+  tests/test_duckdb_screener.py:19
+    acc_data = conn.execute("SELECT * FROM price_data WHERE symbol = 'ACC' ORDER BY date DESC LIMIT 5").fetchall()
+
+  tests/test_duckdb_screener.py:25
+    schema = conn.execute("DESCRIBE price_data").fetchall()
+
+  tests/test_enhanced_eod_system.py:64
+    CREATE TABLE IF NOT EXISTS price_data (
+
+  tests/test_enhanced_eod_system.py:91
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_date ON price_data(symbol, date)")
+
+  tests/test_enhanced_eod_system.py:92
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol ON price_data(symbol)")
+
+  tests/test_enhanced_eod_system.py:93
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON price_data(date)")
+
+  tests/test_enhanced_eod_system.py:303
+    return self._store_price_data(symbol, data_points)
+
+  tests/test_enhanced_eod_system.py:314
+    "SELECT MAX(date) FROM price_data WHERE symbol = ?",
+
+  tests/test_enhanced_eod_system.py:321
+    def _store_price_data(self, symbol: str, data_points: List[Dict]) -> int:
+
+  tests/test_enhanced_eod_system.py:330
+    INSERT OR REPLACE INTO price_data
+
+  tests/test_enhanced_eod_system.py:354
+    SELECT COUNT(*) FROM price_data WHERE symbol = ?
+
+  tests/test_enhanced_eod_system.py:482
+    records_added = self._store_price_data(symbol, [data_point])
+
+  tests/test_enhanced_eod_system.py:489
+    async def get_price_data(self, symbol: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+
+  tests/test_enhanced_eod_system.py:495
+    query = "SELECT * FROM price_data WHERE symbol = ?"
+
+  tests/test_enhanced_eod_system.py:547
+    "SELECT COUNT(*) FROM price_data"
+
+  tests/test_enhanced_eod_system.py:551
+    "SELECT MIN(date), MAX(date) FROM price_data"
+
+  tests/test_enhanced_eod_system.py:633
+    data = await system.get_price_data(test_symbol)
+
+  tests/test_indian_stocks_phase5.py:44
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_indian_stocks_phase5.py:46
+    if price_data is not None:
+
+  tests/test_indian_stocks_phase5.py:47
+    if isinstance(price_data, list) and len(price_data) > 0:
+
+  tests/test_indian_stocks_phase5.py:48
+    logger.info(f"✅ {stock}: Data available ({len(price_data)} records)")
+
+  tests/test_indian_stocks_phase5.py:50
+    elif hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_indian_stocks_phase5.py:51
+    logger.info(f"✅ {stock}: Data available ({len(price_data)} records)")
+
+  tests/test_indian_stocks_phase5.py:119
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_indian_stocks_phase5.py:121
+    if price_data is not None:
+
+  tests/test_indian_stocks_phase5.py:122
+    if isinstance(price_data, list):
+
+  tests/test_indian_stocks_phase5.py:123
+    logger.info(f"   ✅ Price data: {len(price_data)} records (list format)")
+
+  tests/test_indian_stocks_phase5.py:124
+    if len(price_data) > 0:
+
+  tests/test_indian_stocks_phase5.py:125
+    logger.info(f"   📊 Sample data: {price_data[0]}")
+
+  tests/test_indian_stocks_phase5.py:126
+    elif hasattr(price_data, 'empty'):
+
+  tests/test_indian_stocks_phase5.py:127
+    logger.info(f"   ✅ Price data: {len(price_data)} records (DataFrame format)")
+
+  tests/test_indian_stocks_phase5.py:128
+    if not price_data.empty:
+
+  tests/test_indian_stocks_phase5.py:129
+    logger.info(f"   📊 Columns: {list(price_data.columns)}")
+
+  tests/test_indian_stocks_phase5.py:130
+    logger.info(f"   📊 Sample: {price_data.head(1).to_dict()}")
+
+  tests/test_indian_stocks_phase5.py:202
+    price_data = get_prices(test_stock, start_date, end_date)
+
+  tests/test_indian_stocks_phase5.py:204
+    if price_data is not None:
+
+  tests/test_indian_stocks_phase5.py:205
+    if isinstance(price_data, list):
+
+  tests/test_indian_stocks_phase5.py:206
+    logger.info(f"Data is in list format with {len(price_data)} records")
+
+  tests/test_indian_stocks_phase5.py:207
+    if len(price_data) > 0:
+
+  tests/test_indian_stocks_phase5.py:208
+    sample = price_data[0]
+
+  tests/test_indian_stocks_phase5.py:226
+    elif hasattr(price_data, 'empty'):
+
+  tests/test_indian_stocks_phase5.py:227
+    logger.info(f"Data is in DataFrame format with {len(price_data)} records")
+
+  tests/test_indian_stocks_phase5.py:228
+    logger.info(f"Columns: {list(price_data.columns)}")
+
+  tests/test_intraday_screener.py:47
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:49
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:50
+    logger.info(f"   ✅ Data available: {len(price_data)} records")
+
+  tests/test_intraday_screener.py:53
+    analysis = screener._analyze_intraday_opportunities(price_data, stock)
+
+  tests/test_intraday_screener.py:136
+    price_data = get_prices(test_stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:138
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:139
+    logger.info(f"   ✅ Data available: {len(price_data)} records")
+
+  tests/test_intraday_screener.py:143
+    atr = screener._calculate_atr(price_data)
+
+  tests/test_intraday_screener.py:150
+    levels = screener._get_support_resistance_levels(price_data)
+
+  tests/test_intraday_screener.py:157
+    is_support_bounce = screener._is_support_bounce(price_data)
+
+  tests/test_intraday_screener.py:164
+    is_resistance_rejection = screener._is_resistance_rejection(price_data)
+
+  tests/test_intraday_screener.py:197
+    price_data = get_prices(stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:199
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:201
+    indicators = screener.momentum_indicators.calculate_all_indicators(price_data)
+
+  tests/test_intraday_screener.py:204
+    breakout_signals = screener._detect_breakouts(price_data, indicators)
+
+  tests/test_intraday_screener.py:213
+    reversal_signals = screener._detect_reversals(price_data, indicators)
+
+  tests/test_intraday_screener.py:222
+    momentum_signals = screener._detect_momentum(price_data, indicators)
+
+  tests/test_intraday_screener.py:257
+    price_data = get_prices(test_stock, start_date, end_date)
+
+  tests/test_intraday_screener.py:259
+    if price_data is not None and hasattr(price_data, 'empty') and not price_data.empty:
+
+  tests/test_intraday_screener.py:260
+    current_price = price_data['close_price'].iloc[-1]
+
+  tests/test_intraday_screener.py:263
+    entry, sl, targets = screener._calculate_intraday_levels(price_data, current_price, 'BREAKOUT')
+
+  tests/test_intraday_screener.py:271
+    entry, sl, targets = screener._calculate_intraday_levels(price_data, current_price, 'REVERSAL')
+
+  tests/test_intraday_screener.py:279
+    entry, sl, targets = screener._calculate_intraday_levels(price_data, current_price, 'MOMENTUM')
+
+  tests/test_screening_database_only.py:22
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_screening_database_only.py:34
+    FROM price_data
+
+  tests/test_screening_database_only.py:58
+    FROM price_data
+
+  tests/test_screening_simple.py:26
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_screening_simple.py:104
+    price_count = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_screening_simple.py:110
+    FROM price_data
+
+  tests/test_screening_with_comprehensive_data.py:28
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_ui_with_comprehensive_data.py:39
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_ui_with_comprehensive_data.py:151
+    FROM price_data
+
+  tests/test_ui_with_comprehensive_data.py:164
+    FROM price_data
+
+  tests/test_ui_with_comprehensive_data.py:190
+    total_records = conn.execute('SELECT COUNT(*) FROM price_data').fetchone()[0]
+
+  tests/test_ui_with_comprehensive_data.py:193
+    date_range = conn.execute('SELECT MIN(date), MAX(date) FROM price_data').fetchone()
+
+  docs/DATABASE_STATUS_REPORT.md:31
+    1. **`price_data`** - Historical price data (2,150 records)
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:70
+    CREATE TABLE price_data (
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:85
+    CREATE INDEX idx_symbol_date ON price_data(symbol, date);
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:86
+    CREATE INDEX idx_symbol ON price_data(symbol);
+
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md:87
+    CREATE INDEX idx_date ON price_data(date);
+
+FILES
+--------------------
+  app/backend\services\backtest_service.py
+  docs/DATABASE_STATUS_REPORT.md
+  docs/ENHANCED_EOD_SYSTEM_SUMMARY.md
+  src/backtester.py
+  src/data\collectors\technical_collector.py
+  src/data\database\duckdb_manager.py
+  src/data\downloaders\optimized_equity_downloader.py
+  src/data\enhanced_indian_data_manager.py
+  src/data\providers\commodity_provider.py
+  src/data\providers\database_provider.py
+  src/data\providers\duckdb_provider.py
+  src/data\providers\forex_provider.py
+  src/data\update\maintenance_scheduler.py
+  src/data\update\missing_data_filler.py
+  src/data\update\simple_price_updater.py
+  src/ml\enhanced_options_ml_integration.py
+  src/screening\duckdb_eod_screener.py
+  src/screening\enhanced_eod_screener.py
+  src/screening\simple_eod_screener.py
+  src/screening\unified_eod_screener.py
+  src/tools\api.py
+  src/utils\database_stats_utility.py
+  tests/demo_indian_stocks_working.py
+  tests/demo_intraday_screener_working.py
+  tests/final_comprehensive_test.py
+  tests/optimized_test.py
+  tests/test_download.py
+  tests/test_duckdb_screener.py
+  tests/test_enhanced_eod_system.py
+  tests/test_indian_stocks_phase5.py
+  tests/test_intraday_screener.py
+  tests/test_screening_database_only.py
+  tests/test_screening_simple.py
+  tests/test_screening_with_comprehensive_data.py
+  tests/test_ui_with_comprehensive_data.py
+
+FUNCTIONS
+--------------------
+  src/data\collectors\technical_collector.py:66 - def _get_price_data(self, ticker: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+  src/data\database\duckdb_manager.py:415 - def get_price_data(self, ticker: str, start_date: Optional[str] = None,
+  src/data\enhanced_indian_data_manager.py:326 - def _store_price_data_enhanced(self, symbol: str, data_points: List[Dict]) -> int:
+  src/data\enhanced_indian_data_manager.py:493 - async def get_price_data(self, symbol: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+  src/data\update\missing_data_filler.py:319 - def _interpolate_price_data(self, df: pd.DataFrame, missing_dates: List[str]) -> List[Dict[str, Any]]:
+  src/ml\enhanced_options_ml_integration.py:87 - def _create_features_from_prices(self, price_data: pd.DataFrame) -> pd.DataFrame:
+  src/tools\api.py:340 - def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
+  src/utils\database_stats_utility.py:67 - def analyze_price_data(conn, table_name):
+  tests/test_enhanced_eod_system.py:321 - def _store_price_data(self, symbol: str, data_points: List[Dict]) -> int:
+  tests/test_enhanced_eod_system.py:489 - async def get_price_data(self, symbol: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:

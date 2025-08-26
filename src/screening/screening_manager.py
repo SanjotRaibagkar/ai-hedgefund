@@ -154,14 +154,25 @@ class ScreeningManager:
         Get EOD trading signals using unified screener.
         
         Args:
-            stock_list: List of stocks to screen
+            stock_list: List of stocks to screen (None = all symbols from database)
             risk_reward_ratio: Minimum risk-reward ratio
             
         Returns:
             EOD signals with entry, stop loss, and targets
         """
         if stock_list is None:
-            stock_list = self.default_indian_stocks
+            # Get all symbols from database for comprehensive screening
+            try:
+                from src.data.database.duckdb_manager import DatabaseManager
+                db_manager = DatabaseManager()
+                all_symbols = db_manager.get_available_symbols()
+                # Convert to .NS format for consistency
+                stock_list = [f"{symbol}.NS" for symbol in all_symbols]
+                self.logger.info(f"Using all {len(stock_list)} symbols from database for EOD screening")
+            except Exception as e:
+                self.logger.error(f"Error getting all symbols from database: {e}")
+                self.logger.info("Falling back to default stock list")
+                stock_list = self.default_indian_stocks
         
         # Convert .NS symbols to regular symbols for unified screener
         symbols = [s.replace('.NS', '') for s in stock_list]
@@ -204,13 +215,24 @@ class ScreeningManager:
         Get intraday trading signals.
         
         Args:
-            stock_list: List of stocks to screen
+            stock_list: List of stocks to screen (None = all symbols from database)
             
         Returns:
             Intraday signals with breakout, reversal, and momentum opportunities
         """
         if stock_list is None:
-            stock_list = self.default_indian_stocks
+            # Get all symbols from database for comprehensive screening
+            try:
+                from src.data.database.duckdb_manager import DatabaseManager
+                db_manager = DatabaseManager()
+                all_symbols = db_manager.get_available_symbols()
+                # Convert to .NS format for consistency
+                stock_list = [f"{symbol}.NS" for symbol in all_symbols]
+                self.logger.info(f"Using all {len(stock_list)} symbols from database for intraday screening")
+            except Exception as e:
+                self.logger.error(f"Error getting all symbols from database: {e}")
+                self.logger.info("Falling back to default stock list")
+                stock_list = self.default_indian_stocks
         
         return self.intraday_screener.screen_stocks(stock_list)
     

@@ -35,6 +35,9 @@ app.title = "MokshTechandInvestment - AI Screening Dashboard"
 # Initialize screening manager
 screening_manager = ScreeningManager()
 
+# Global variable to store current EOD results for search functionality
+current_eod_results = {}
+
 # App layout
 app.layout = dbc.Container([
     # Header
@@ -55,7 +58,7 @@ app.layout = dbc.Container([
                     dbc.Row([
                         dbc.Col([
                             dbc.Button("Run EOD Screening", id="btn-eod", color="primary", className="me-2"),
-                            dbc.Button("Run Intraday Screening", id="btn-intraday", color="success", className="me-2"),
+                            dbc.Button("Run Intraday Screening", id="btn-intraday", color="success", className="me-2", disabled=True),
                             dbc.Button("Run Options Analysis", id="btn-options", color="warning", className="me-2"),
                             dbc.Button("Run Market Predictions", id="btn-predictions", color="info", className="me-2"),
                             dbc.Button("Run Comprehensive Screening", id="btn-comprehensive", color="dark")
@@ -65,11 +68,25 @@ app.layout = dbc.Container([
                     dbc.Row([
                         dbc.Col([
                             html.Label("Stock List (comma-separated):"),
-                            dcc.Textarea(
-                                id="stock-list",
-                                value="RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, ICICIBANK.NS",
-                                style={'width': '100%', 'height': 60}
-                            )
+                            html.Div([
+                                html.Small("💡 Leave empty to screen ALL stocks from database", className="text-muted"),
+                                dcc.Textarea(
+                                    id="stock-list",
+                                    value="RELIANCE.NS, TCS.NS, HDFCBANK.NS, INFY.NS, ICICIBANK.NS",
+                                    placeholder="Enter stock symbols or leave empty for all stocks...",
+                                    style={'width': '100%', 'height': 60}
+                                )
+                            ])
+                        ], width=4),
+                        dbc.Col([
+                            html.Label("Note:"),
+                            html.Div([
+                                html.Small("🚫 Intraday Screening is temporarily disabled", className="text-warning"),
+                                html.Br(),
+                                html.Small("✅ EOD Screening is fully functional", className="text-success"),
+                                html.Br(),
+                                html.Small("📊 Real-time progress shown in terminal", className="text-info")
+                            ])
                         ], width=4),
                         dbc.Col([
                             html.Label("Risk-Reward Ratio:"),
@@ -100,6 +117,33 @@ app.layout = dbc.Container([
             ])
         ], width=12)
     ], className="mb-4"),
+    
+    # Progress Indicators
+    dbc.Row([
+        dbc.Col([
+            html.Div(id="eod-progress", style={'display': 'none'})
+        ], width=12)
+    ], className="mb-3"),
+    dbc.Row([
+        dbc.Col([
+            html.Div(id="intraday-progress", style={'display': 'none'})
+        ], width=12)
+    ], className="mb-3"),
+    dbc.Row([
+        dbc.Col([
+            html.Div(id="options-progress", style={'display': 'none'})
+        ], width=12)
+    ], className="mb-3"),
+    dbc.Row([
+        dbc.Col([
+            html.Div(id="predictions-progress", style={'display': 'none'})
+        ], width=12)
+    ], className="mb-3"),
+    dbc.Row([
+        dbc.Col([
+            html.Div(id="comprehensive-progress", style={'display': 'none'})
+        ], width=12)
+    ], className="mb-3"),
     
     # Results Display
     dbc.Row([
@@ -167,9 +211,77 @@ app.layout = dbc.Container([
     ])
 ], fluid=True)
 
+# Helper Functions
+def create_signal_list(signals, signal_type):
+    """Create a formatted list of signals with proper styling."""
+    if not signals:
+        return html.P("No signals found.", className="text-muted")
+    
+    signal_items = []
+    for i, signal in enumerate(signals):
+        # Determine color based on signal type
+        if signal_type == 'bullish':
+            color_class = "text-success"
+            icon = "📈"
+        else:
+            color_class = "text-danger"
+            icon = "📉"
+        
+        # Create signal card
+        signal_card = dbc.Card([
+            dbc.CardBody([
+                html.Div([
+                    html.H6(f"{icon} {signal['symbol']}", className=f"{color_class} mb-2"),
+                    html.P(f"Confidence: {signal['confidence']}%", className="mb-1"),
+                    html.P(f"Entry: ₹{signal['entry_price']:.2f} | SL: ₹{signal['stop_loss']:.2f}", className="mb-1"),
+                    html.P(f"Target 1: ₹{signal['targets']['T1']:.2f} | Risk-Reward: {signal['risk_reward_ratio']:.2f}", className="mb-0"),
+                ])
+            ])
+        ], className="mb-2")
+        
+        signal_items.append(signal_card)
+    
+    return signal_items
+
+def create_intraday_signal_list(signals, signal_type):
+    """Create a formatted list of intraday signals with proper styling."""
+    if not signals:
+        return html.P("No signals found.", className="text-muted")
+    
+    signal_items = []
+    for i, signal in enumerate(signals):
+        # Determine color and icon based on signal type
+        if signal_type == 'breakout':
+            color_class = "text-primary"
+            icon = "🚀"
+        elif signal_type == 'reversal':
+            color_class = "text-warning"
+            icon = "🔄"
+        else:  # momentum
+            color_class = "text-info"
+            icon = "💨"
+        
+        # Create signal card
+        signal_card = dbc.Card([
+            dbc.CardBody([
+                html.Div([
+                    html.H6(f"{icon} {signal.get('ticker', signal.get('symbol', 'N/A'))}", className=f"{color_class} mb-2"),
+                    html.P(f"Type: {signal.get('signal_type', 'N/A')} | Confidence: {signal.get('confidence', 0)}%", className="mb-1"),
+                    html.P(f"Entry: ₹{signal.get('entry_price', 0):.2f} | SL: ₹{signal.get('stop_loss', 0):.2f}", className="mb-1"),
+                    html.P(f"Risk-Reward: {signal.get('risk_reward_ratio', 0):.2f}", className="mb-0"),
+                ])
+            ])
+        ], className="mb-2")
+        
+        signal_items.append(signal_card)
+    
+    return signal_items
+
 # Callbacks
 @app.callback(
-    Output("eod-results", "children"),
+    [Output("eod-results", "children"),
+     Output("eod-progress", "children"),
+     Output("eod-progress", "style")],
     Input("btn-eod", "n_clicks"),
     Input("stock-list", "value"),
     Input("risk-reward-slider", "value"),
@@ -178,85 +290,195 @@ app.layout = dbc.Container([
 )
 def run_eod_screening(n_clicks, stock_list, risk_reward, analysis_mode):
     if n_clicks is None:
-        return "Click 'Run EOD Screening' to start..."
+        return "Click 'Run EOD Screening' to start...", None, {'display': 'none'}
     
     try:
-        # Parse stock list
-        stocks = [s.strip() for s in stock_list.split(",") if s.strip()]
+        # Show progress indicator with animated elements
+        progress = dbc.Alert([
+            dbc.Spinner(size="lg", spinner_class_name="me-3"),
+            html.Div([
+                html.H5("🔄 EOD Screening in Progress...", className="mb-2"),
+                html.P("Analyzing 2,129+ stocks for trading signals", className="mb-2"),
+                html.Div([
+                    html.Span("📊 Loading market data...", className="me-3"),
+                    html.Span("⚡ Calculating indicators...", className="me-3"),
+                    html.Span("🎯 Generating signals...", className="me-3"),
+                    html.Span("📈 Filtering results...", className="me-3")
+                ], className="text-muted mb-2"),
+                html.Small("⏱️ Estimated time: 30-60 seconds for comprehensive analysis", className="text-info"),
+                html.Br(),
+                html.Small("💡 You can see real-time progress in the terminal/console", className="text-muted")
+            ])
+        ], color="info", className="mb-3")
+        
+        # Debug logging
+        print(f"🔍 EOD Screening Debug:")
+        print(f"   n_clicks: {n_clicks}")
+        print(f"   stock_list: {repr(stock_list)}")
+        print(f"   risk_reward: {risk_reward}")
+        print(f"   analysis_mode: {analysis_mode}")
+        
+        # Parse stock list - handle None and empty cases
+        if stock_list is None or stock_list.strip() == "":
+            stocks = None  # This will trigger screening manager to use all symbols
+            print(f"   ✅ Using all symbols from database (stocks=None)")
+        else:
+            stocks = [s.strip() for s in stock_list.split(",") if s.strip()]
+            # If no valid stocks found, use all symbols
+            if not stocks:
+                stocks = None
+                print(f"   ✅ No valid stocks found, using all symbols (stocks=None)")
+            else:
+                print(f"   ✅ Using specific stocks: {stocks}")
+        
+        print(f"   🚀 Starting screening...")
+        
+        # Show initial progress
+        print(f"   📊 Progress: Starting analysis...")
         
         # Run screening with analysis mode
         results = screening_manager.get_eod_signals(stocks, risk_reward, analysis_mode)
+        
+        # Store results globally for search functionality
+        global current_eod_results
+        current_eod_results = results
+        
+        print(f"   ✅ Screening completed!")
+        print(f"   📊 Results: {results['summary']['total_stocks']} stocks, {results['summary']['bullish_count']} bullish, {results['summary']['bearish_count']} bearish")
         
         # Create results display
         bullish_count = results['summary']['bullish_count']
         bearish_count = results['summary']['bearish_count']
         total_stocks = results['summary']['total_stocks']
         
+        # Calculate neutral count
+        neutral_count = total_stocks - bullish_count - bearish_count
+        
+        # Create organized results with sections
         content = [
-            html.H5("📊 EOD Screening Results"),
-            html.P(f"Analysis Mode: {analysis_mode.title()}"),
-            html.P(f"Total Stocks Analyzed: {total_stocks}"),
-            html.P(f"Bullish Signals: {bullish_count} | Bearish Signals: {bearish_count}"),
-            html.Br()
+            # Summary
+            dbc.Alert([
+                html.H5("📊 EOD Screening Results", className="mb-2"),
+                html.P(f"Analysis Mode: {analysis_mode.title()} | Total Stocks: {total_stocks}", className="mb-1"),
+                html.P(f"Bullish: {bullish_count} | Bearish: {bearish_count} | Neutral: {neutral_count}", className="mb-0")
+            ], color="success", className="mb-3"),
+            
+            # Search and Filter
+            dbc.Row([
+                dbc.Col([
+                    dcc.Input(
+                        id="eod-search",
+                        type="text",
+                        placeholder="Search stocks by symbol/name...",
+                        style={'width': '100%', 'padding': '8px', 'border': '1px solid #ddd', 'borderRadius': '4px'}
+                    )
+                ], width=6),
+                dbc.Col([
+                    dcc.Dropdown(
+                        id="eod-filter",
+                        options=[
+                            {'label': 'All Signals', 'value': 'all'},
+                            {'label': 'Bullish Only', 'value': 'bullish'},
+                            {'label': 'Bearish Only', 'value': 'bearish'},
+                            {'label': 'High Confidence (>80%)', 'value': 'high_confidence'}
+                        ],
+                        value='all',
+                        style={'width': '100%'}
+                    )
+                ], width=6)
+            ], className="mb-3"),
+            
+            # Results Sections
+            dbc.Row([
+                # Bullish Section
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(f"📈 Bullish Signals ({bullish_count})", className="text-success"),
+                        dbc.CardBody([
+                            html.Div(
+                                id="bullish-signals",
+                                children=create_signal_list(results.get('bullish_signals', []), 'bullish'),
+                                style={'maxHeight': '400px', 'overflowY': 'auto'}
+                            )
+                        ])
+                    ])
+                ], width=4),
+                
+                # Bearish Section
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(f"📉 Bearish Signals ({bearish_count})", className="text-danger"),
+                        dbc.CardBody([
+                            html.Div(
+                                id="bearish-signals",
+                                children=create_signal_list(results.get('bearish_signals', []), 'bearish'),
+                                style={'maxHeight': '400px', 'overflowY': 'auto'}
+                            )
+                        ])
+                    ])
+                ], width=4),
+                
+                # Neutral Section
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(f"➡️ Neutral Signals ({neutral_count})", className="text-muted"),
+                        dbc.CardBody([
+                            html.Div([
+                                html.P("Stocks that don't meet bullish or bearish criteria.", className="text-muted"),
+                                html.P("These may be good for watchlist or further analysis.", className="text-muted")
+                            ])
+                        ])
+                    ])
+                ], width=4)
+            ])
         ]
         
         # Show message if no signals found
         if bullish_count == 0 and bearish_count == 0:
-            content.extend([
-                html.Div([
+            content = [
+                dbc.Alert([
                     html.H6("💡 No EOD Signals Found", className="text-info"),
                     html.P("This is normal with limited data. Historical data would generate more signals."),
-                    html.P("✅ Analysis completed successfully!"),
-                    html.Hr()
-                ], className="alert alert-info")
-            ])
-        else:
-            # Show top signals
-            if results['bullish_signals']:
-                content.append(html.H6("Top Bullish Signals:"))
-                for signal in results['bullish_signals'][:3]:
-                    content.append(html.Div([
-                        html.Strong(f"{signal['ticker']} - {signal['confidence']}% confidence"),
-                        html.Br(),
-                        html.Small(f"Entry: ₹{signal['entry_price']:.2f} | SL: ₹{signal['stop_loss']:.2f} | T1: ₹{signal['targets']['T1']:.2f}"),
-                        html.Br(),
-                        html.Small(f"Risk-Reward: {signal['risk_reward_ratio']:.2f}"),
-                        html.Hr()
-                    ]))
-            
-            if results['bearish_signals']:
-                content.append(html.H6("Top Bearish Signals:"))
-                for signal in results['bearish_signals'][:3]:
-                    content.append(html.Div([
-                        html.Strong(f"{signal['ticker']} - {signal['confidence']}% confidence"),
-                        html.Br(),
-                        html.Small(f"Entry: ₹{signal['entry_price']:.2f} | SL: ₹{signal['stop_loss']:.2f} | T1: ₹{signal['targets']['T1']:.2f}"),
-                        html.Br(),
-                        html.Small(f"Risk-Reward: {signal['risk_reward_ratio']:.2f}"),
-                        html.Hr()
-                    ]))
+                    html.P("✅ Analysis completed successfully!")
+                ], color="info")
+            ]
         
-        return content
+        return content, None, {'display': 'none'}
         
     except Exception as e:
-        return html.Div([
+        error_content = html.Div([
             html.H5("❌ Error occurred during EOD screening"),
             html.P(str(e), className="text-danger")
         ])
+        return error_content, None, {'display': 'none'}
 
 @app.callback(
-    Output("intraday-results", "children"),
+    [Output("intraday-results", "children"),
+     Output("intraday-progress", "children"),
+     Output("intraday-progress", "style")],
     Input("btn-intraday", "n_clicks"),
     Input("stock-list", "value"),
     prevent_initial_call=True
 )
 def run_intraday_screening(n_clicks, stock_list):
     if n_clicks is None:
-        return "Click 'Run Intraday Screening' to start..."
+        return "Click 'Run Intraday Screening' to start...", None, {'display': 'none'}
     
     try:
-        # Parse stock list
-        stocks = [s.strip() for s in stock_list.split(",") if s.strip()]
+        # Show progress indicator
+        progress = dbc.Alert([
+            dbc.Spinner(size="sm", spinner_class_name="me-2"),
+            "🔄 Running Intraday Screening... Please wait while we analyze real-time data."
+        ], color="info", className="mb-3")
+        
+        # Parse stock list - handle None and empty cases
+        if stock_list is None or stock_list.strip() == "":
+            stocks = None  # This will trigger screening manager to use all symbols
+        else:
+            stocks = [s.strip() for s in stock_list.split(",") if s.strip()]
+            # If no valid stocks found, use all symbols
+            if not stocks:
+                stocks = None
         
         # Run screening
         results = screening_manager.get_intraday_signals(stocks)
@@ -267,59 +489,97 @@ def run_intraday_screening(n_clicks, stock_list):
         momentum_count = results['summary']['momentum_count']
         total_stocks = results['summary']['total_stocks']
         
+        # Create organized results with sections
         content = [
-            html.H5("⚡ Intraday Screening Results"),
-            html.P(f"Total Stocks Analyzed: {total_stocks}"),
-            html.P(f"Breakout Signals: {breakout_count} | Reversal Signals: {reversal_count} | Momentum Signals: {momentum_count}"),
-            html.Br()
+            # Summary
+            dbc.Alert([
+                html.H5("⚡ Intraday Screening Results", className="mb-2"),
+                html.P(f"Total Stocks: {total_stocks}", className="mb-1"),
+                html.P(f"Breakout: {breakout_count} | Reversal: {reversal_count} | Momentum: {momentum_count}", className="mb-0")
+            ], color="success", className="mb-3"),
+            
+            # Results Sections
+            dbc.Row([
+                # Breakout Section
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(f"🚀 Breakout Signals ({breakout_count})", className="text-primary"),
+                        dbc.CardBody([
+                            html.Div(
+                                id="breakout-signals",
+                                children=create_intraday_signal_list(results.get('breakout_signals', []), 'breakout'),
+                                style={'maxHeight': '400px', 'overflowY': 'auto'}
+                            )
+                        ])
+                    ])
+                ], width=4),
+                
+                # Reversal Section
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(f"🔄 Reversal Signals ({reversal_count})", className="text-warning"),
+                        dbc.CardBody([
+                            html.Div(
+                                id="reversal-signals",
+                                children=create_intraday_signal_list(results.get('reversal_signals', []), 'reversal'),
+                                style={'maxHeight': '400px', 'overflowY': 'auto'}
+                            )
+                        ])
+                    ])
+                ], width=4),
+                
+                # Momentum Section
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader(f"💨 Momentum Signals ({momentum_count})", className="text-info"),
+                        dbc.CardBody([
+                            html.Div(
+                                id="momentum-signals",
+                                children=create_intraday_signal_list(results.get('momentum_signals', []), 'momentum'),
+                                style={'maxHeight': '400px', 'overflowY': 'auto'}
+                            )
+                        ])
+                    ])
+                ], width=4)
+            ])
         ]
         
         # Show message if no signals found
         if breakout_count == 0 and reversal_count == 0 and momentum_count == 0:
-            content.extend([
-                html.Div([
+            content = [
+                dbc.Alert([
                     html.H6("💡 No Intraday Signals Found", className="text-info"),
                     html.P("This is normal with limited data. Real-time data feeds would generate more signals."),
-                    html.P("✅ Analysis completed successfully!"),
-                    html.Hr()
-                ], className="alert alert-info")
-            ])
-        else:
-            # Show top signals
-            all_signals = (results['breakout_signals'] + 
-                          results['reversal_signals'] + 
-                          results['momentum_signals'])
-            
-            if all_signals:
-                content.append(html.H6("Top Signals:"))
-                for signal in all_signals[:5]:
-                    content.append(html.Div([
-                        html.Strong(f"{signal['ticker']} - {signal['signal_type']} - {signal['confidence']}%"),
-                        html.Br(),
-                        html.Small(f"Entry: ₹{signal['entry_price']:.2f} | SL: ₹{signal['stop_loss']:.2f}"),
-                        html.Br(),
-                        html.Small(f"Risk-Reward: {signal['risk_reward_ratio']:.2f}"),
-                        html.Hr()
-                    ]))
+                    html.P("✅ Analysis completed successfully!")
+                ], color="info")
+            ]
         
-        return content
+        return content, None, {'display': 'none'}
         
     except Exception as e:
-        return html.Div([
+        error_content = html.Div([
             html.H5("❌ Error occurred during intraday screening"),
             html.P(str(e), className="text-danger")
         ])
+        return error_content, None, {'display': 'none'}
 
 @app.callback(
-    Output("options-results", "children"),
+    [Output("options-results", "children"),
+     Output("options-progress", "children"),
+     Output("options-progress", "style")],
     Input("btn-options", "n_clicks"),
     prevent_initial_call=True
 )
 def run_options_analysis(n_clicks):
     if n_clicks is None:
-        return "Click 'Run Options Analysis' to start..."
+        return "Click 'Run Options Analysis' to start...", None, {'display': 'none'}
     
     try:
+        # Show progress indicator
+        progress = dbc.Alert([
+            dbc.Spinner(size="sm", spinner_class_name="me-2"),
+            "🔄 Running Options Analysis... Please wait while we analyze options data."
+        ], color="info", className="mb-3")
         # Import the unified options analyzer
         import sys
         import os
@@ -379,24 +639,32 @@ def run_options_analysis(n_clicks):
                     html.Hr()
                 ])
         
-        return content
+        return content, None, {'display': 'none'}
         
     except Exception as e:
-        return html.Div([
+        error_content = html.Div([
             html.H5("❌ Error occurred during options analysis"),
             html.P(str(e), className="text-danger")
         ])
+        return error_content, None, {'display': 'none'}
 
 @app.callback(
-    Output("predictions-results", "children"),
+    [Output("predictions-results", "children"),
+     Output("predictions-progress", "children"),
+     Output("predictions-progress", "style")],
     Input("btn-predictions", "n_clicks"),
     prevent_initial_call=True
 )
 def run_market_predictions(n_clicks):
     if n_clicks is None:
-        return "Click 'Run Market Predictions' to start..."
+        return "Click 'Run Market Predictions' to start...", None, {'display': 'none'}
     
     try:
+        # Show progress indicator
+        progress = dbc.Alert([
+            dbc.Spinner(size="sm", spinner_class_name="me-2"),
+            "🔄 Running Market Predictions... Please wait while we analyze ML models."
+        ], color="info", className="mb-3")
         # Import enhanced options ML integration
         import sys
         import os
@@ -471,24 +739,32 @@ def run_market_predictions(n_clicks):
                 ], className="alert alert-warning")
             ])
         
-        return content
+        return content, None, {'display': 'none'}
         
     except Exception as e:
-        return html.Div([
+        error_content = html.Div([
             html.H5("❌ Error occurred during market predictions"),
             html.P(str(e), className="text-danger")
         ])
+        return error_content, None, {'display': 'none'}
 
 @app.callback(
-    Output("comprehensive-results", "children"),
+    [Output("comprehensive-results", "children"),
+     Output("comprehensive-progress", "children"),
+     Output("comprehensive-progress", "style")],
     Input("btn-comprehensive", "n_clicks"),
     prevent_initial_call=True
 )
 def run_comprehensive_screening(n_clicks):
     if n_clicks is None:
-        return "Click 'Run Comprehensive Screening' to start..."
+        return "Click 'Run Comprehensive Screening' to start...", None, {'display': 'none'}
     
     try:
+        # Show progress indicator
+        progress = dbc.Alert([
+            dbc.Spinner(size="sm", spinner_class_name="me-2"),
+            "🔄 Running Comprehensive Screening... Please wait while we analyze all market data."
+        ], color="info", className="mb-3")
         # Run comprehensive screening on ALL stocks from database
         results = screening_manager.run_comprehensive_screening(
             stock_list=None,  # None means use all stocks from database
@@ -574,10 +850,10 @@ def run_comprehensive_screening(n_clicks):
                 ])
             ])
         
-        return content
+        return content, None, {'display': 'none'}
         
     except Exception as e:
-        return html.Div([
+        error_content = html.Div([
             html.H5("❌ Error occurred during comprehensive screening"),
             html.P(f"Error: {str(e)}", className="text-danger"),
             html.P("This might be due to:", className="text-muted"),
@@ -590,6 +866,90 @@ def run_comprehensive_screening(n_clicks):
             html.Hr(),
             html.P("💡 Try running individual screenings (EOD, Intraday) instead.", className="text-info")
         ])
+        return error_content, None, {'display': 'none'}
+
+
+
+# Search callback for EOD results
+@app.callback(
+    [Output("bullish-signals", "children"),
+     Output("bearish-signals", "children")],
+    [Input("eod-search", "value"),
+     Input("eod-filter", "value")],
+    prevent_initial_call=True
+)
+def filter_eod_results(search_term, filter_type):
+    """Filter EOD results based on search term and filter type."""
+    try:
+        global current_eod_results
+        
+        # If no results available, show message
+        if not current_eod_results:
+            return [
+                html.P("💡 Run EOD Screening first to enable search functionality", className="text-info"),
+                html.P("💡 Run EOD Screening first to enable search functionality", className="text-info")
+            ]
+        
+        # Get original signals
+        original_bullish = current_eod_results.get('bullish_signals', [])
+        original_bearish = current_eod_results.get('bearish_signals', [])
+        
+        # Filter by search term if provided
+        if search_term and search_term.strip():
+            search_term = search_term.strip().upper()
+            
+            # Filter bullish signals
+            filtered_bullish = [
+                signal for signal in original_bullish 
+                if search_term in signal.get('symbol', '').upper()
+            ]
+            
+            # Filter bearish signals
+            filtered_bearish = [
+                signal for signal in original_bearish 
+                if search_term in signal.get('symbol', '').upper()
+            ]
+        else:
+            filtered_bullish = original_bullish
+            filtered_bearish = original_bearish
+        
+        # Apply additional filter type
+        if filter_type == 'bullish':
+            filtered_bearish = []
+        elif filter_type == 'bearish':
+            filtered_bullish = []
+        elif filter_type == 'high_confidence':
+            filtered_bullish = [s for s in filtered_bullish if s.get('confidence', 0) > 80]
+            filtered_bearish = [s for s in filtered_bearish if s.get('confidence', 0) > 80]
+        
+        # Create filtered results
+        bullish_results = create_signal_list(filtered_bullish, 'bullish')
+        bearish_results = create_signal_list(filtered_bearish, 'bearish')
+        
+        # Add search info if search term was used
+        if search_term and search_term.strip():
+            search_info = html.Div([
+                html.P(f"🔍 Search results for '{search_term}':", className="text-info"),
+                html.P(f"📈 Bullish: {len(filtered_bullish)} | 📉 Bearish: {len(filtered_bearish)}", className="text-muted")
+            ], className="mb-2")
+            
+            if isinstance(bullish_results, list):
+                bullish_results.insert(0, search_info)
+            else:
+                bullish_results = [search_info, bullish_results]
+            
+            if isinstance(bearish_results, list):
+                bearish_results.insert(0, search_info)
+            else:
+                bearish_results = [search_info, bearish_results]
+        
+        return bullish_results, bearish_results
+            
+    except Exception as e:
+        return [
+            html.P(f"Search error: {str(e)}", className="text-danger"),
+            html.P(f"Search error: {str(e)}", className="text-danger")
+        ]
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0', port=8050) 

@@ -144,7 +144,7 @@ class SimplePriceUpdater:
                 numeric_columns = ['open_price', 'high_price', 'low_price', 'close_price', 'last_price', 'prev_close', 'volume', 'turnover']
                 for col in numeric_columns:
                     if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(float)
                 
                 # Add metadata
                 df['last_updated'] = datetime.now()
@@ -189,14 +189,14 @@ class SimplePriceUpdater:
                                 INSERT INTO price_data (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """, [
-                                symbol_data.iloc[0]['symbol'],
+                                str(symbol_data.iloc[0]['symbol']),
                                 symbol_data.iloc[0]['date'],
-                                symbol_data.iloc[0].get('open_price', 0),
-                                symbol_data.iloc[0].get('high_price', 0),
-                                symbol_data.iloc[0].get('low_price', 0),
-                                symbol_data.iloc[0].get('close_price', 0),
-                                symbol_data.iloc[0].get('volume', 0),
-                                symbol_data.iloc[0].get('turnover', 0),
+                                float(symbol_data.iloc[0].get('open_price', 0)),
+                                float(symbol_data.iloc[0].get('high_price', 0)),
+                                float(symbol_data.iloc[0].get('low_price', 0)),
+                                float(symbol_data.iloc[0].get('close_price', 0)),
+                                float(symbol_data.iloc[0].get('volume', 0)),
+                                float(symbol_data.iloc[0].get('turnover', 0)),
                                 symbol_data.iloc[0]['last_updated']
                             ])
                             
@@ -274,14 +274,14 @@ class SimplePriceUpdater:
                                 INSERT INTO price_data (symbol, date, open_price, high_price, low_price, close_price, volume, turnover, last_updated)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """, [
-                                symbol_data.iloc[0]['symbol'],
+                                str(symbol_data.iloc[0]['symbol']),
                                 symbol_data.iloc[0]['date'],
-                                symbol_data.iloc[0].get('open_price', 0),
-                                symbol_data.iloc[0].get('high_price', 0),
-                                symbol_data.iloc[0].get('low_price', 0),
-                                symbol_data.iloc[0].get('close_price', 0),
-                                symbol_data.iloc[0].get('volume', 0),
-                                symbol_data.iloc[0].get('turnover', 0),
+                                float(symbol_data.iloc[0].get('open_price', 0)),
+                                float(symbol_data.iloc[0].get('high_price', 0)),
+                                float(symbol_data.iloc[0].get('low_price', 0)),
+                                float(symbol_data.iloc[0].get('close_price', 0)),
+                                float(symbol_data.iloc[0].get('volume', 0)),
+                                float(symbol_data.iloc[0].get('turnover', 0)),
                                 symbol_data.iloc[0]['last_updated']
                             ])
                             

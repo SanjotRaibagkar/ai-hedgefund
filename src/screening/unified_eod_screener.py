@@ -63,15 +63,62 @@ class UnifiedEODScreener:
             symbols, start_date, end_date, min_volume, min_price, max_workers, analysis_mode
         )
         
-        # Process results
+        # Debug: Show raw results before filtering
+        raw_bullish = len([r for r in results if r and r.get('signal') == 'BULLISH'])
+        raw_bearish = len([r for r in results if r and r.get('signal') == 'BEARISH'])
+        logger.info(f"📊 Raw Results (before filtering):")
+        logger.info(f"   Raw bullish signals: {raw_bullish}")
+        logger.info(f"   Raw bearish signals: {raw_bearish}")
+        logger.info(f"   Total results: {len(results)}")
+        
+        # Process results with quality filters
         bullish_signals = []
         bearish_signals = []
         
+        # Debug counters
+        total_signals = 0
+        confidence_filtered = 0
+        risk_reward_filtered = 0
+        volume_filtered = 0
+        passed_filters = 0
+        
         for result in results:
-            if result['signal'] == 'BULLISH':
-                bullish_signals.append(result)
-            elif result['signal'] == 'BEARISH':
-                bearish_signals.append(result)
+            if result is None:
+                continue
+                
+            total_signals += 1
+            
+            # Quality filters (lowered thresholds)
+            min_confidence = 50  # Lowered from 60%
+            min_risk_reward = 1.5  # Lowered from 1.8
+            min_volume_ratio = 1.0  # Lowered from 1.2
+            
+            # Check if signal meets quality criteria
+            confidence_ok = result.get('confidence', 0) >= min_confidence
+            risk_reward_ok = result.get('risk_reward_ratio', 0) >= min_risk_reward
+            volume_ok = result.get('volume_ratio', 0) >= min_volume_ratio
+            
+            if not confidence_ok:
+                confidence_filtered += 1
+            if not risk_reward_ok:
+                risk_reward_filtered += 1
+            if not volume_ok:
+                volume_filtered += 1
+            
+            if confidence_ok and risk_reward_ok and volume_ok:
+                passed_filters += 1
+                if result['signal'] == 'BULLISH':
+                    bullish_signals.append(result)
+                elif result['signal'] == 'BEARISH':
+                    bearish_signals.append(result)
+        
+        # Log filter statistics
+        logger.info(f"📊 Filter Statistics:")
+        logger.info(f"   Total signals generated: {total_signals}")
+        logger.info(f"   Confidence filtered: {confidence_filtered}")
+        logger.info(f"   Risk-reward filtered: {risk_reward_filtered}")
+        logger.info(f"   Volume filtered: {volume_filtered}")
+        logger.info(f"   Passed all filters: {passed_filters}")
         
         # Generate summary
         summary = {
@@ -185,7 +232,7 @@ class UnifiedEODScreener:
             # Calculate levels
             levels = self._calculate_levels(historical_data, signal['signal'])
             
-            return {
+            result = {
                 'symbol': symbol,
                 'signal': signal['signal'],
                 'confidence': signal['confidence'],
@@ -197,9 +244,22 @@ class UnifiedEODScreener:
                 'current_price': current_price,
                 'volume': volume,
                 'avg_volume': avg_volume,
+                'volume_ratio': indicators.get('volume_ratio', {}).iloc[-1] if 'volume_ratio' in indicators else 1.0,
+                'volatility': levels.get('volatility', 0),
                 'analysis_mode': analysis_mode,
                 'screening_date': datetime.now().isoformat()
             }
+            
+            # Debug: Log first few signals
+            if symbol in ['RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK']:
+                logger.info(f"🔍 Sample Signal - {symbol}:")
+                logger.info(f"   Signal: {result['signal']}")
+                logger.info(f"   Confidence: {result['confidence']}%")
+                logger.info(f"   Risk-Reward: {result['risk_reward_ratio']}")
+                logger.info(f"   Volume Ratio: {result['volume_ratio']}")
+                logger.info(f"   Volatility: {result['volatility']}%")
+            
+            return result
             
         except Exception as e:
             logger.error(f"❌ Error screening {symbol}: {e}")
@@ -347,20 +407,36 @@ class UnifiedEODScreener:
         # Determine signal based on analysis mode
         if analysis_mode == 'basic':
             required_score = 3
-            confidence_multiplier = 15
+            confidence_multiplier = 8
         elif analysis_mode == 'enhanced':
             required_score = 4
-            confidence_multiplier = 12
+            confidence_multiplier = 7
         else:  # comprehensive
             required_score = 5
-            confidence_multiplier = 10
+            confidence_multiplier = 6
         
         if bullish_score >= required_score and bullish_score > bearish_score:
             signal = 'BULLISH'
-            confidence = min(90, 50 + (bullish_score * confidence_multiplier))
+            # More realistic confidence calculation
+            base_confidence = 40 + (bullish_score * confidence_multiplier)
+            # Add volume bonus
+            if indicators['volume_ratio'].iloc[-1] > 2.0:
+                base_confidence += 10
+            # Add trend strength bonus
+            if current_price > indicators['sma_50'].iloc[-1]:
+                base_confidence += 5
+            confidence = min(85, base_confidence)
         elif bearish_score >= required_score and bearish_score > bullish_score:
             signal = 'BEARISH'
-            confidence = min(90, 50 + (bearish_score * confidence_multiplier))
+            # More realistic confidence calculation
+            base_confidence = 40 + (bearish_score * confidence_multiplier)
+            # Add volume bonus
+            if indicators['volume_ratio'].iloc[-1] > 2.0:
+                base_confidence += 10
+            # Add trend strength bonus
+            if current_price < indicators['sma_50'].iloc[-1]:
+                base_confidence += 5
+            confidence = min(85, base_confidence)
             reasons = [f"Bearish: {r}" for r in reasons]
         else:
             signal = 'NEUTRAL'
@@ -379,18 +455,38 @@ class UnifiedEODScreener:
         current_price = df['close_price'].iloc[-1]
         atr = self._calculate_atr(df, 14)
         
+        # Calculate volatility-based multipliers
+        volatility = df['close_price'].pct_change().std() * 100  # Volatility as percentage
+        
+        # Dynamic multipliers based on volatility
+        if volatility < 2:  # Low volatility
+            sl_multiplier = 1.5
+            t1_multiplier = 2.5
+            t2_multiplier = 4.0
+            t3_multiplier = 6.0
+        elif volatility < 4:  # Medium volatility
+            sl_multiplier = 2.0
+            t1_multiplier = 3.5
+            t2_multiplier = 5.5
+            t3_multiplier = 8.0
+        else:  # High volatility
+            sl_multiplier = 2.5
+            t1_multiplier = 4.5
+            t2_multiplier = 7.0
+            t3_multiplier = 10.0
+        
         if signal == 'BULLISH':
             entry = current_price
-            stop_loss = entry - (atr * 2)
-            target1 = entry + (atr * 3)
-            target2 = entry + (atr * 5)
-            target3 = entry + (atr * 8)
+            stop_loss = entry - (atr * sl_multiplier)
+            target1 = entry + (atr * t1_multiplier)
+            target2 = entry + (atr * t2_multiplier)
+            target3 = entry + (atr * t3_multiplier)
         else:  # BEARISH
             entry = current_price
-            stop_loss = entry + (atr * 2)
-            target1 = entry - (atr * 3)
-            target2 = entry - (atr * 5)
-            target3 = entry - (atr * 8)
+            stop_loss = entry + (atr * sl_multiplier)
+            target1 = entry - (atr * t1_multiplier)
+            target2 = entry - (atr * t2_multiplier)
+            target3 = entry - (atr * t3_multiplier)
         
         risk = abs(entry - stop_loss)
         reward = abs(target1 - entry)
@@ -404,7 +500,8 @@ class UnifiedEODScreener:
                 'T2': round(target2, 2),
                 'T3': round(target3, 2)
             },
-            'risk_reward': round(risk_reward, 2)
+            'risk_reward': round(risk_reward, 2),
+            'volatility': round(volatility, 2)
         }
     
     def _calculate_atr(self, df: pd.DataFrame, period: int) -> float:
