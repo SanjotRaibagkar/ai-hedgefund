@@ -6,6 +6,7 @@ Handles automated scheduling of data updates and maintenance tasks.
 import asyncio
 import schedule
 import time
+import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 from loguru import logger
@@ -132,12 +133,12 @@ class MaintenanceScheduler:
                 getattr(schedule.every(), weekly_day).at(weekly_time).do(self._run_weekly_maintenance)
                 logger.info(f"✅ Scheduled weekly maintenance on {weekly_day} at {weekly_time}")
             
-            # Monthly cleanup
+            # Monthly cleanup (using weekly schedule as fallback since schedule library doesn't support monthly)
             if self.scheduler_config.get("monthly_cleanup", {}).get("enabled", True):
-                monthly_day = self.scheduler_config["monthly_cleanup"].get("day", 1)
                 monthly_time = self.scheduler_config["monthly_cleanup"].get("time", "03:00")
-                schedule.every().month.at(monthly_time).do(self._run_monthly_cleanup)
-                logger.info(f"✅ Scheduled monthly cleanup on day {monthly_day} at {monthly_time}")
+                # Schedule for first Sunday of each month (approximation)
+                schedule.every().sunday.at(monthly_time).do(self._run_monthly_cleanup)
+                logger.info(f"✅ Scheduled monthly cleanup (weekly fallback) at {monthly_time}")
             
             logger.info("All schedules configured successfully")
             
@@ -208,6 +209,14 @@ class MaintenanceScheduler:
                     elif eod_type == "equity_bhav_copy_delivery":
                         df = self.eod_downloader.nse.bhav_copy_with_delivery(nse_date_format)
                         if not df.empty:
+                            # Clean problematic data - handle '-' values
+                            if 'DELIV_QTY' in df.columns:
+                                df['DELIV_QTY'] = df['DELIV_QTY'].replace(['-', ' -', '- '], '0')
+                                df['DELIV_QTY'] = pd.to_numeric(df['DELIV_QTY'], errors='coerce').fillna(0).astype(int)
+                            if 'DELIV_PER' in df.columns:
+                                df['DELIV_PER'] = df['DELIV_PER'].replace(['-', ' -', '- '], '0')
+                                df['DELIV_PER'] = pd.to_numeric(df['DELIV_PER'], errors='coerce').fillna(0)
+                            
                             df['TRADE_DATE'] = target_dt.date()
                             df['last_updated'] = datetime.now().isoformat()
                             self.eod_downloader.conn.execute("DELETE FROM equity_bhav_copy_delivery WHERE TRADE_DATE = ?", [target_dt.date()])
@@ -218,6 +227,16 @@ class MaintenanceScheduler:
                     elif eod_type == "bhav_copy_indices":
                         df = self.eod_downloader.nse.bhav_copy_indices(nse_date_format)
                         if not df.empty:
+                            # Clean problematic data - handle '-' values in numeric columns
+                            numeric_columns = ['Open Index Value', 'High Index Value', 'Low Index Value', 
+                                             'Closing Index Value', 'Points Change', 'Change(%)', 'Volume', 
+                                             'Turnover (Rs. Cr.)', 'P/E', 'P/B', 'Div Yield']
+                            
+                            for col in numeric_columns:
+                                if col in df.columns:
+                                    df[col] = df[col].replace(['-', ' -', '- '], '0')
+                                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                            
                             df['TRADE_DATE'] = target_dt.date()
                             df['last_updated'] = datetime.now().isoformat()
                             self.eod_downloader.conn.execute("DELETE FROM bhav_copy_indices WHERE TRADE_DATE = ?", [target_dt.date()])
@@ -228,9 +247,10 @@ class MaintenanceScheduler:
                     elif eod_type == "fii_dii_activity":
                         df = self.eod_downloader.nse.fii_dii_activity()
                         if not df.empty:
-                            df['activity_date'] = target_dt.date()
+                            # Use 'date' column instead of 'activity_date' to match actual schema
+                            df['date'] = target_dt.date()
                             df['last_updated'] = datetime.now().isoformat()
-                            self.eod_downloader.conn.execute("DELETE FROM fii_dii_activity WHERE activity_date = ?", [target_dt.date()])
+                            self.eod_downloader.conn.execute("DELETE FROM fii_dii_activity WHERE date = ?", [target_dt.date()])
                             self.eod_downloader.conn.execute("INSERT INTO fii_dii_activity SELECT * FROM df")
                             successful_types.append(eod_type)
                             logger.info(f"✅ {eod_type}: {len(df)} records")

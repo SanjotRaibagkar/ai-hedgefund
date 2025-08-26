@@ -41,6 +41,18 @@ class AsyncDataCollector:
         self.fundamental_collector = FundamentalDataCollector()
         self.market_collector = MarketDataCollector()
         
+    async def collect_data(self, config: DataCollectionConfig) -> List[DataCollectionResult]:
+        """
+        Collect data for a ticker (alias for collect_historical_data for compatibility).
+        
+        Args:
+            config: Data collection configuration
+            
+        Returns:
+            List of collection results
+        """
+        return await self.collect_historical_data(config)
+    
     async def collect_historical_data(self, config: DataCollectionConfig) -> List[DataCollectionResult]:
         """
         Collect historical data for a ticker.
