@@ -40,7 +40,9 @@ class FNOChatInterface:
             # Parse query to extract intent and parameters
             parsed_query = self._parse_query(query)
             
-            if parsed_query['intent'] == 'probability_prediction':
+            if parsed_query['intent'] == 'current_price':
+                return self._handle_current_price(parsed_query)
+            elif parsed_query['intent'] == 'probability_prediction':
                 return self._handle_probability_prediction(parsed_query)
             elif parsed_query['intent'] == 'stock_search':
                 return self._handle_stock_search(parsed_query)
@@ -71,6 +73,29 @@ class FNOChatInterface:
                 'min_probability': 0.1,
                 'max_results': 10
             }
+            
+            # Check for current price/value intent first
+            if any(word in query_lower for word in ['value', 'price', 'current', 'now', 'today', 'latest']):
+                parsed['intent'] = 'current_price'
+                
+                # Extract symbols for current price
+                symbols = self._extract_symbols(query)
+                if symbols:
+                    parsed['symbols'] = symbols
+                else:
+                    # If no specific symbols mentioned, try to extract from common patterns
+                    if 'nifty' in query_lower:
+                        parsed['symbols'] = ['NIFTY']
+                    elif 'banknifty' in query_lower or 'bank nifty' in query_lower:
+                        parsed['symbols'] = ['BANKNIFTY']
+                    elif 'reliance' in query_lower:
+                        parsed['symbols'] = ['RELIANCE']
+                    elif 'tcs' in query_lower:
+                        parsed['symbols'] = ['TCS']
+                    elif 'infy' in query_lower or 'infosys' in query_lower:
+                        parsed['symbols'] = ['INFY']
+                
+                return parsed
             
             # Check for probability prediction intent
             if any(word in query_lower for word in ['probability', 'chance', 'move', 'tomorrow', 'week', 'month', 'predict', 'forecast']):
@@ -280,6 +305,125 @@ class FNOChatInterface:
             return {
                 'error': True,
                 'message': f"Sorry, I couldn't retrieve system status: {str(e)}"
+            }
+    
+    def _handle_current_price(self, parsed_query: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle current price queries."""
+        try:
+            symbols = parsed_query.get('symbols', [])
+            if not symbols:
+                return {
+                    'error': True,
+                    'message': "Please specify which stock or index you want to know the current price for."
+                }
+            
+            # Get current prices from the data processor
+            current_prices = []
+            for symbol in symbols:
+                try:
+                    # Try to get current price from the data processor
+                    price_info = self._get_current_price(symbol)
+                    current_prices.append(price_info)
+                except Exception as e:
+                    self.logger.error(f"Failed to get price for {symbol}: {e}")
+                    current_prices.append({
+                        'symbol': symbol,
+                        'error': f"Could not retrieve current price for {symbol}"
+                    })
+            
+            # Format response
+            message_parts = []
+            for price_info in current_prices:
+                if 'error' in price_info:
+                    message_parts.append(f"❌ {price_info['error']}")
+                else:
+                    message_parts.append(f"📊 {price_info['symbol']}: ₹{price_info['price']:.2f} ({price_info['change']:+.2f}%)")
+            
+            message = "\n".join(message_parts)
+            
+            return {
+                'type': 'current_price',
+                'message': message,
+                'prices': current_prices,
+                'query': parsed_query
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Failed to handle current price query: {e}")
+            return {
+                'error': True,
+                'message': f"Sorry, I couldn't get the current prices: {str(e)}"
+            }
+    
+    def _get_current_price(self, symbol: str) -> Dict[str, Any]:
+        """Get current price for a symbol from the database."""
+        try:
+            from datetime import datetime
+            import duckdb
+            
+            # Connect to the database
+            db_path = "data/comprehensive_equity.duckdb"
+            
+            # Query to get the latest price from fno_bav_copy table
+            query = """
+            SELECT 
+                symbol,
+                close_price as price,
+                ((close_price - prev_close_price) / prev_close_price * 100) as change_percent,
+                timestamp
+            FROM fno_bav_copy 
+            WHERE symbol = ? 
+            ORDER BY timestamp DESC 
+            LIMIT 1
+            """
+            
+            with duckdb.connect(db_path) as conn:
+                result = conn.execute(query, [symbol]).fetchone()
+                
+                if result:
+                    symbol_name, price, change_percent, timestamp = result
+                    return {
+                        'symbol': symbol_name,
+                        'price': float(price) if price else 0.0,
+                        'change': float(change_percent) if change_percent else 0.0,
+                        'timestamp': timestamp.isoformat() if timestamp else datetime.now().isoformat()
+                    }
+                else:
+                    # If not found in fno_bav_copy, try to get from price_data table
+                    query_price_data = """
+                    SELECT 
+                        symbol,
+                        close as price,
+                        ((close - prev_close) / prev_close * 100) as change_percent,
+                        date
+                    FROM price_data 
+                    WHERE symbol = ? 
+                    ORDER BY date DESC 
+                    LIMIT 1
+                    """
+                    
+                    result_price = conn.execute(query_price_data, [symbol]).fetchone()
+                    
+                    if result_price:
+                        symbol_name, price, change_percent, date = result_price
+                        return {
+                            'symbol': symbol_name,
+                            'price': float(price) if price else 0.0,
+                            'change': float(change_percent) if change_percent else 0.0,
+                            'timestamp': date.isoformat() if date else datetime.now().isoformat()
+                        }
+                    else:
+                        # If still not found, return error
+                        return {
+                            'symbol': symbol,
+                            'error': f"No data found for {symbol} in database"
+                        }
+                
+        except Exception as e:
+            self.logger.error(f"Failed to get current price for {symbol}: {e}")
+            return {
+                'symbol': symbol,
+                'error': f"Database error: {str(e)}"
             }
     
     def _handle_general_query(self, query: str) -> Dict[str, Any]:

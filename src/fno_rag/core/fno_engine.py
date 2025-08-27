@@ -6,7 +6,7 @@ Coordinates all FNO RAG system components for unified probability prediction.
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 import logging
 from loguru import logger
 from datetime import datetime, timedelta
@@ -114,25 +114,34 @@ class FNOEngine:
             self.logger.error(f"Failed to build vector store: {e}")
             raise
     
-    def predict_probability(self, symbol: str, horizon: HorizonType = HorizonType.DAILY,
+    def predict_probability(self, symbol_or_request: Union[str, PredictionRequest], 
+                          horizon: HorizonType = HorizonType.DAILY,
                           include_explanations: bool = True) -> ProbabilityResult:
         """Predict probability for a specific symbol and horizon."""
         try:
             if not self.initialized:
                 raise ValueError("System not initialized")
             
-            request = PredictionRequest(
-                symbol=symbol,
-                horizon=horizon,
-                include_explanations=include_explanations,
-                top_k_similar=5
-            )
+            # Handle both string symbol and PredictionRequest
+            if isinstance(symbol_or_request, str):
+                # Create request from symbol
+                request = PredictionRequest(
+                    symbol=symbol_or_request,
+                    horizon=horizon,
+                    include_explanations=include_explanations,
+                    top_k_similar=5
+                )
+            elif isinstance(symbol_or_request, PredictionRequest):
+                # Use the provided request directly
+                request = symbol_or_request
+            else:
+                raise ValueError("First parameter must be either a string symbol or PredictionRequest")
             
             result = self.predictor.predict_probability(request)
             return result
             
         except Exception as e:
-            self.logger.error(f"Failed to predict probability for {symbol}: {e}")
+            self.logger.error(f"Failed to predict probability: {e}")
             raise
     
     def predict_batch(self, symbols: List[str], horizon: HorizonType = HorizonType.DAILY) -> List[ProbabilityResult]:
@@ -398,3 +407,25 @@ class FNOEngine:
         except Exception as e:
             self.logger.error(f"Failed to convert result to dict: {e}")
             return {}
+    
+    def chat(self, query: str) -> str:
+        """Process natural language queries using the chat interface."""
+        try:
+            if not self.initialized:
+                return "❌ FNO RAG System not initialized. Please initialize the system first."
+            
+            # Use the chat interface to process the query
+            result = self.chat_interface.process_query(query)
+            
+            # Extract the response message
+            if isinstance(result, dict):
+                if result.get('error'):
+                    return f"❌ {result.get('message', 'Unknown error')}"
+                else:
+                    return result.get('message', 'No response generated')
+            else:
+                return str(result)
+                
+        except Exception as e:
+            self.logger.error(f"Failed to process chat query: {e}")
+            return f"❌ Error processing query: {str(e)}"
