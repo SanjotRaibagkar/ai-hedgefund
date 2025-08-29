@@ -57,11 +57,12 @@ class ComprehensiveBacktester:
     def get_available_symbols(self) -> List[str]:
         """Get list of available FNO symbols from the database."""
         try:
-            # Get unique symbols from the database
+            # Get unique symbols from the database - only STF (Stock Futures)
             query = """
                 SELECT DISTINCT TckrSymb as symbol
                 FROM fno_bhav_copy
-                WHERE TckrSymb IN ('NIFTY', 'BANKNIFTY', 'FINNIFTY', 'RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'SBIN', 'AXISBANK')
+                WHERE FinInstrmTp = 'STF' 
+                AND TckrSymb IN ('RELIANCE', 'TCS', 'INFY', 'HDFC', 'ICICIBANK', 'SBIN', 'AXISBANK', 'HINDUNILVR', 'ITC', 'BHARTIARTL')
                 ORDER BY TckrSymb
             """
             
@@ -71,13 +72,13 @@ class ComprehensiveBacktester:
             with duckdb.connect(db_path) as conn:
                 result = conn.execute(query).fetchdf()
             
-            symbols = result['symbol'].tolist() if not result.empty else ['NIFTY', 'BANKNIFTY']
-            print(f"📊 Available symbols for backtesting: {symbols}")
+            symbols = result['symbol'].tolist() if not result.empty else ['RELIANCE', 'TCS']
+            print(f"📊 Available STF symbols for backtesting: {symbols}")
             return symbols
             
         except Exception as e:
-            print(f"⚠️ Error getting symbols, using defaults: {e}")
-            return ['NIFTY', 'BANKNIFTY']
+            print(f"⚠️ Error getting STF symbols, using defaults: {e}")
+            return ['RELIANCE', 'TCS']
     
     def get_historical_data_range(self) -> Tuple[str, str]:
         """Get the date range for the last 6 months of data."""
@@ -119,6 +120,7 @@ class ComprehensiveBacktester:
                 SELECT DISTINCT TRADE_DATE
                 FROM fno_bhav_copy
                 WHERE TckrSymb = ? 
+                AND FinInstrmTp = 'STF'
                 AND TRADE_DATE BETWEEN ? AND ?
                 ORDER BY TRADE_DATE
             """
@@ -158,6 +160,7 @@ class ComprehensiveBacktester:
                     ClsPric as close_price
                 FROM fno_bhav_copy
                 WHERE TckrSymb = ? 
+                AND FinInstrmTp = 'STF'
                 AND TRADE_DATE IN (?, ?)
                 ORDER BY TRADE_DATE
             """
@@ -290,7 +293,7 @@ class ComprehensiveBacktester:
     
     def run_comprehensive_backtest(self, num_test_days: int = 10) -> pd.DataFrame:
         """Run comprehensive backtesting for multiple symbols and dates."""
-        print("🎯 Starting Comprehensive Backtesting")
+        print("🎯 Starting Comprehensive Backtesting (STF Only)")
         print("=" * 60)
         
         # Initialize system
@@ -302,7 +305,7 @@ class ComprehensiveBacktester:
         start_date, end_date = self.get_historical_data_range()
         
         print(f"📅 Testing period: {start_date} to {end_date}")
-        print(f"📊 Testing symbols: {symbols}")
+        print(f"📊 Testing STF symbols: {symbols}")
         print(f"🎲 Number of test days: {num_test_days}")
         
         all_results = []
@@ -437,7 +440,7 @@ class ComprehensiveBacktester:
 
 def main():
     """Main function to run comprehensive backtesting."""
-    print("🎯 Comprehensive FNO ML and RAG Backtesting")
+    print("🎯 Comprehensive FNO ML and RAG Backtesting (STF Only)")
     print("=" * 60)
     print(f"📅 Started at: {datetime.now()}")
     print("=" * 60)

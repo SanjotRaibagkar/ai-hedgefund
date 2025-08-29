@@ -215,8 +215,9 @@ class EODExtraDataDownloader:
                 
                 # Thread-safe database operations
                 with self.db_lock:
-                    self.conn.execute("DELETE FROM fno_bhav_copy WHERE TRADE_DATE = ?", [current_dt.date()])
-                    self.conn.execute("INSERT INTO fno_bhav_copy SELECT * FROM df")
+                    # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                    # This preserves existing data and only updates duplicates
+                    self.conn.execute("INSERT OR REPLACE INTO fno_bhav_copy SELECT * FROM df")
                 
                 result['success'] = True
                 result['records'] = len(df)
@@ -255,8 +256,9 @@ class EODExtraDataDownloader:
                 
                 # Thread-safe database operations
                 with self.db_lock:
-                    self.conn.execute("DELETE FROM equity_bhav_copy_delivery WHERE TRADE_DATE = ?", [current_dt.date()])
-                    self.conn.execute("INSERT INTO equity_bhav_copy_delivery SELECT * FROM df")
+                    # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                    # This preserves existing data and only updates duplicates
+                    self.conn.execute("INSERT OR REPLACE INTO equity_bhav_copy_delivery SELECT * FROM df")
                 
                 result['success'] = True
                 result['records'] = len(df)
@@ -299,8 +301,9 @@ class EODExtraDataDownloader:
                 
                 # Thread-safe database operations
                 with self.db_lock:
-                    self.conn.execute("DELETE FROM bhav_copy_indices WHERE TRADE_DATE = ?", [current_dt.date()])
-                    self.conn.execute("INSERT INTO bhav_copy_indices SELECT * FROM df")
+                    # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                    # This preserves existing data and only updates duplicates
+                    self.conn.execute("INSERT OR REPLACE INTO bhav_copy_indices SELECT * FROM df")
                 
                 result['success'] = True
                 result['records'] = len(df)
@@ -575,8 +578,9 @@ class EODExtraDataDownloader:
                     df['last_updated'] = datetime.now().isoformat()
                     
                     # Store in database
-                    self.conn.execute("DELETE FROM fno_bhav_copy WHERE TRADE_DATE = ?", [current_dt.date()])
-                    self.conn.execute("INSERT INTO fno_bhav_copy SELECT * FROM df")
+                    # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                    # This preserves existing data and only updates duplicates
+                    self.conn.execute("INSERT OR REPLACE INTO fno_bhav_copy SELECT * FROM df")
                     
                     records_added = len(df)
                     total_records += records_added
@@ -641,8 +645,9 @@ class EODExtraDataDownloader:
                     df['last_updated'] = datetime.now().isoformat()
                     
                     # Store in database
-                    self.conn.execute("DELETE FROM equity_bhav_copy_delivery WHERE TRADE_DATE = ?", [current_dt.date()])
-                    self.conn.execute("INSERT INTO equity_bhav_copy_delivery SELECT * FROM df")
+                    # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                    # This preserves existing data and only updates duplicates
+                    self.conn.execute("INSERT OR REPLACE INTO equity_bhav_copy_delivery SELECT * FROM df")
                     
                     records_added = len(df)
                     total_records += records_added

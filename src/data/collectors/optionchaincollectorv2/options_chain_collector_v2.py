@@ -204,10 +204,10 @@ class OptionsChainCollectorV2:
         }
     
     def _prepare_data_for_duckdb(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
-        """Prepare data for DuckDB insertion."""
+        """Prepare data for DuckDB insertion - transform from wide to long format."""
         try:
-            # Ensure required columns exist
-            required_columns = ['Strike_Price', 'CE_OI', 'PE_OI', 'CE_Volume', 'PE_Volume']
+            # Ensure required columns exist (using actual parquet file column names)
+            required_columns = ['Strike_Price', 'CALLS_OI', 'PUTS_OI', 'CALLS_Volume', 'PUTS_Volume', 'index_name']
             
             for col in required_columns:
                 if col not in df.columns:
@@ -217,9 +217,11 @@ class OptionsChainCollectorV2:
             # Clean and prepare data
             processed_df = df.copy()
             
-            # Convert numeric columns
-            numeric_columns = ['Strike_Price', 'CE_OI', 'PE_OI', 'CE_Volume', 'PE_Volume', 
-                             'CE_Change_in_OI', 'PE_Change_in_OI', 'CE_IV', 'PE_IV']
+            # Convert numeric columns (using actual column names)
+            numeric_columns = ['Strike_Price', 'CALLS_OI', 'PUTS_OI', 'CALLS_Volume', 'PUTS_Volume', 
+                             'CALLS_Chng_in_OI', 'PUTS_Chng_in_OI', 'CALLS_IV', 'PUTS_IV',
+                             'CALLS_LTP', 'PUTS_LTP', 'CALLS_Bid_Price', 'PUTS_Bid_Price',
+                             'CALLS_Ask_Price', 'PUTS_Ask_Price']
             
             for col in numeric_columns:
                 if col in processed_df.columns:
@@ -232,10 +234,64 @@ class OptionsChainCollectorV2:
             else:
                 processed_df['timestamp'] = datetime.now()
             
-            # Add date column
-            processed_df['date'] = processed_df['timestamp'].dt.date
+            # Transform from wide to long format (separate CALL and PUT rows)
+            call_data = []
+            put_data = []
             
-            return processed_df
+            for _, row in processed_df.iterrows():
+                # CALL option data
+                call_data.append({
+                    'timestamp': row['timestamp'],
+                    'index_symbol': row['index_name'],
+                    'strike_price': row['Strike_Price'],
+                    'expiry_date': pd.to_datetime(row['Expiry_Date'], format='%d-%b-%Y').date(),
+                    'option_type': 'CE',
+                    'last_price': row.get('CALLS_LTP', 0),
+                    'bid_price': row.get('CALLS_Bid_Price', 0),
+                    'ask_price': row.get('CALLS_Ask_Price', 0),
+                    'volume': row.get('CALLS_Volume', 0),
+                    'open_interest': row.get('CALLS_OI', 0),
+                    'change_in_oi': row.get('CALLS_Chng_in_OI', 0),
+                    'implied_volatility': row.get('CALLS_IV', 0),
+                    'delta': 0,  # Not available in current data
+                    'gamma': 0,  # Not available in current data
+                    'theta': 0,  # Not available in current data
+                    'vega': 0,   # Not available in current data
+                    'spot_price': 0,  # Will be calculated later
+                    'atm_strike': 0,  # Will be calculated later
+                    'pcr': 0,    # Will be calculated later
+                    'created_at': row['timestamp']
+                })
+                
+                # PUT option data
+                put_data.append({
+                    'timestamp': row['timestamp'],
+                    'index_symbol': row['index_name'],
+                    'strike_price': row['Strike_Price'],
+                    'expiry_date': pd.to_datetime(row['Expiry_Date'], format='%d-%b-%Y').date(),
+                    'option_type': 'PE',
+                    'last_price': row.get('PUTS_LTP', 0),
+                    'bid_price': row.get('PUTS_Bid_Price', 0),
+                    'ask_price': row.get('PUTS_Ask_Price', 0),
+                    'volume': row.get('PUTS_Volume', 0),
+                    'open_interest': row.get('PUTS_OI', 0),
+                    'change_in_oi': row.get('PUTS_Chng_in_OI', 0),
+                    'implied_volatility': row.get('PUTS_IV', 0),
+                    'delta': 0,  # Not available in current data
+                    'gamma': 0,  # Not available in current data
+                    'theta': 0,  # Not available in current data
+                    'vega': 0,   # Not available in current data
+                    'spot_price': 0,  # Will be calculated later
+                    'atm_strike': 0,  # Will be calculated later
+                    'pcr': 0,    # Will be calculated later
+                    'created_at': row['timestamp']
+                })
+            
+            # Combine CALL and PUT data
+            combined_data = call_data + put_data
+            result_df = pd.DataFrame(combined_data)
+            
+            return result_df
             
         except Exception as e:
             self.logger.error(f"❌ Error preparing data: {e}")
@@ -245,13 +301,12 @@ class OptionsChainCollectorV2:
         """Insert data into DuckDB."""
         try:
             # Import here to avoid multiprocessing issues
-            from src.data.database.duckdb_manager import DatabaseManager
+            from src.data.database.options_db_manager import OptionsDatabaseManager
             
-            # Create a new database manager instance
-            db_manager = DatabaseManager()
+            # Create a new options database manager instance
+            db_manager = OptionsDatabaseManager()
             
-            # Use the existing database manager to insert data
-            # This will use the same table structure as the original collector
+            # Use the options database manager to insert data
             success = db_manager.insert_options_data(df)
             return success
             

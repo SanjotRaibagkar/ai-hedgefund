@@ -201,10 +201,11 @@ class MaintenanceScheduler:
                         if not df.empty:
                             df['TRADE_DATE'] = target_dt.date()
                             df['last_updated'] = datetime.now().isoformat()
-                            self.eod_downloader.conn.execute("DELETE FROM fno_bhav_copy WHERE TRADE_DATE = ?", [target_dt.date()])
-                            self.eod_downloader.conn.execute("INSERT INTO fno_bhav_copy SELECT * FROM df")
+                            # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                            # This preserves existing data and only updates duplicates
+                            self.eod_downloader.conn.execute("INSERT OR REPLACE INTO fno_bhav_copy SELECT * FROM df")
                             successful_types.append(eod_type)
-                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                            logger.info(f"✅ {eod_type}: {len(df)} records (INSERT OR REPLACE)")
                     
                     elif eod_type == "equity_bhav_copy_delivery":
                         df = self.eod_downloader.nse.bhav_copy_with_delivery(nse_date_format)
@@ -219,10 +220,11 @@ class MaintenanceScheduler:
                             
                             df['TRADE_DATE'] = target_dt.date()
                             df['last_updated'] = datetime.now().isoformat()
-                            self.eod_downloader.conn.execute("DELETE FROM equity_bhav_copy_delivery WHERE TRADE_DATE = ?", [target_dt.date()])
-                            self.eod_downloader.conn.execute("INSERT INTO equity_bhav_copy_delivery SELECT * FROM df")
+                            # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                            # This preserves existing data and only updates duplicates
+                            self.eod_downloader.conn.execute("INSERT OR REPLACE INTO equity_bhav_copy_delivery SELECT * FROM df")
                             successful_types.append(eod_type)
-                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                            logger.info(f"✅ {eod_type}: {len(df)} records (INSERT OR REPLACE)")
                     
                     elif eod_type == "bhav_copy_indices":
                         df = self.eod_downloader.nse.bhav_copy_indices(nse_date_format)
@@ -239,10 +241,11 @@ class MaintenanceScheduler:
                             
                             df['TRADE_DATE'] = target_dt.date()
                             df['last_updated'] = datetime.now().isoformat()
-                            self.eod_downloader.conn.execute("DELETE FROM bhav_copy_indices WHERE TRADE_DATE = ?", [target_dt.date()])
-                            self.eod_downloader.conn.execute("INSERT INTO bhav_copy_indices SELECT * FROM df")
+                            # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                            # This preserves existing data and only updates duplicates
+                            self.eod_downloader.conn.execute("INSERT OR REPLACE INTO bhav_copy_indices SELECT * FROM df")
                             successful_types.append(eod_type)
-                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                            logger.info(f"✅ {eod_type}: {len(df)} records (INSERT OR REPLACE)")
                     
                     elif eod_type == "fii_dii_activity":
                         df = self.eod_downloader.nse.fii_dii_activity()
@@ -250,10 +253,11 @@ class MaintenanceScheduler:
                             # Use 'date' column instead of 'activity_date' to match actual schema
                             df['date'] = target_dt.date()
                             df['last_updated'] = datetime.now().isoformat()
-                            self.eod_downloader.conn.execute("DELETE FROM fii_dii_activity WHERE date = ?", [target_dt.date()])
-                            self.eod_downloader.conn.execute("INSERT INTO fii_dii_activity SELECT * FROM df")
+                            # FIXED: Use INSERT OR REPLACE instead of DELETE + INSERT
+                            # This preserves existing data and only updates duplicates
+                            self.eod_downloader.conn.execute("INSERT OR REPLACE INTO fii_dii_activity SELECT * FROM df")
                             successful_types.append(eod_type)
-                            logger.info(f"✅ {eod_type}: {len(df)} records")
+                            logger.info(f"✅ {eod_type}: {len(df)} records (INSERT OR REPLACE)")
                     
                 except Exception as e:
                     failed_types.append(eod_type)

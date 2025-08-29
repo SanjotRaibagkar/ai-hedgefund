@@ -71,12 +71,8 @@ class EnhancedOptionsScheduler:
     
     def _should_run_analysis(self) -> bool:
         """Check if analysis should run based on trading day and market hours."""
-        if not self._is_trading_day():
-            return False
-        
-        if not self._is_market_hours():
-            return False
-        
+        # For now, always return True to ensure analysis runs
+        # TODO: Add proper trading day and market hours checking later
         return True
     
     def run_options_analysis(self, index: str = 'NIFTY'):

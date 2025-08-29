@@ -346,8 +346,6 @@ class FixedEnhancedOptionsAnalyzer:
                 'suggested_trade': result['signal']['suggested_trade'],
                 'strongest_support': result['support_resistance']['support'],
                 'strongest_resistance': result['support_resistance']['resistance'],
-                'support_distance_pct': result['support_resistance']['support_distance_pct'],
-                'resistance_distance_pct': result['support_resistance']['resistance_distance_pct'],
                 'atm_call_oi': result['oi_analysis']['atm_call_oi'],
                 'atm_put_oi': result['oi_analysis']['atm_put_oi'],
                 'atm_call_oi_change': result['oi_analysis']['atm_call_oi_change'],

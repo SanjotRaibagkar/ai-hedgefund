@@ -56,13 +56,9 @@ class DatabaseManager:
     def _create_tables(self):
         """Create database tables if they don't exist."""
         
-        # Drop existing tables to ensure schema consistency
-        logger.info("🔄 Dropping existing tables for schema consistency...")
-        self.connection.execute("DROP TABLE IF EXISTS technical_data")
-        self.connection.execute("DROP TABLE IF EXISTS fundamental_data")
-        self.connection.execute("DROP TABLE IF EXISTS market_data")
-        self.connection.execute("DROP TABLE IF EXISTS corporate_actions")
-        self.connection.execute("DROP TABLE IF EXISTS data_quality_metrics")
+        # FIXED: Use CREATE TABLE IF NOT EXISTS instead of DROP TABLE
+        # This preserves existing data and only creates tables if they don't exist
+        logger.info("🔧 Creating tables if they don't exist (preserving existing data)...")
         
         # Technical Data Table with foreign key to price_data
         self.connection.execute("""
@@ -150,12 +146,13 @@ class DatabaseManager:
                 ticker VARCHAR,
                 action_date DATE,
                 action_type VARCHAR,
-                description VARCHAR,
-                value DOUBLE,
-                ratio VARCHAR,
+                description TEXT,
                 ex_date DATE,
                 record_date DATE,
                 payment_date DATE,
+                ratio VARCHAR,
+                dividend_amount DOUBLE,
+                split_ratio VARCHAR,
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP,
                 PRIMARY KEY (ticker, action_date, action_type),
@@ -163,7 +160,7 @@ class DatabaseManager:
             )
         """)
         
-        # Data Quality Metrics Table
+        # Data Quality Metrics Table (using existing schema)
         self.connection.execute("""
             CREATE TABLE IF NOT EXISTS data_quality_metrics (
                 ticker VARCHAR,
@@ -182,35 +179,14 @@ class DatabaseManager:
             )
         """)
         
-        # Options Chain Data Table - Now managed by OptionsDatabaseManager
-        # Moved to separate database: data/options_chain_data.duckdb
-        
-        logger.info("✅ All tables created with consistent schema")
-        
         # Create indexes for better performance
-        self._create_indexes()
-        
-    def _create_indexes(self):
-        """Create database indexes for better query performance."""
-        
-        # Technical data indexes
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_technical_ticker ON technical_data(ticker)")
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_technical_date ON technical_data(trade_date)")
         self.connection.execute("CREATE INDEX IF NOT EXISTS idx_technical_ticker_date ON technical_data(ticker, trade_date)")
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_fundamental_ticker_date ON fundamental_data(ticker, report_date)")
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_market_ticker_date ON market_data(ticker, market_date)")
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_corporate_ticker_date ON corporate_actions(ticker, action_date)")
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_quality_ticker_date ON data_quality_metrics(ticker, quality_date)")
         
-        # Fundamental data indexes
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_fundamental_ticker ON fundamental_data(ticker)")
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_fundamental_date ON fundamental_data(report_date)")
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_fundamental_period ON fundamental_data(period_type)")
-        
-        # Market data indexes
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_market_ticker ON market_data(ticker)")
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_market_date ON market_data(market_date)")
-        
-        # Corporate actions indexes
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_corporate_ticker ON corporate_actions(ticker)")
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_corporate_date ON corporate_actions(action_date)")
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_corporate_type ON corporate_actions(action_type)")
+        logger.info("✅ All tables created/verified successfully (existing data preserved)")
         
     def insert_technical_data(self, data: Union[pd.DataFrame, List[TechnicalData]]):
         """Insert technical data into database."""

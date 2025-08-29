@@ -108,7 +108,10 @@ class OptionsDatabaseManager:
                 data['created_at'] = datetime.now()
             
             # Insert data using DuckDB's efficient DataFrame insertion
-            self.connection.execute("INSERT INTO options_chain_data SELECT * FROM data")
+            # Register DataFrame as temporary table and insert with REPLACE to handle duplicates
+            self.connection.register("temp_data", data)
+            self.connection.execute("INSERT OR REPLACE INTO options_chain_data SELECT * FROM temp_data")
+            self.connection.execute("DROP VIEW temp_data")
             
             logger.info(f"Inserted {len(data)} options data records")
             
