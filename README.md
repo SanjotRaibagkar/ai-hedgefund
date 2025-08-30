@@ -8,7 +8,8 @@ A comprehensive AI-powered hedge fund system with **Enhanced FNO RAG (Retrieval-
 - **26,816 Market Snapshots** with semantic embeddings
 - **384-dimensional** sentence transformer embeddings
 - **240+ Unique Symbols** (NIFTY, BANKNIFTY, RELIANCE, TCS, etc.)
-- **6 Months Historical Data** (March 2025 - August 2025)
+- **6 Months FNO Data** (March 2025 - August 2025)
+- **5+ Years EOD Data** for comprehensive analysis
 - **Advanced RAG Analysis** with GROQ LLM integration
 - **Semantic Similarity Search** for historical pattern matching
 
@@ -143,13 +144,13 @@ A comprehensive AI-powered hedge fund system with **Enhanced FNO RAG (Retrieval-
 - **Symbols**: NIFTY, BANKNIFTY + 240+ stocks
 - **Options**: CE/PE for all strike prices
 - **Frequency**: Real-time during market hours
-- **History**: 6 months comprehensive data
+- **History**: 6 months comprehensive FNO data
 
 ### **Equity Data**
 - **Symbols**: 2,000+ equity symbols
 - **Data**: OHLCV, fundamentals, technical indicators
 - **Frequency**: Daily updates
-- **History**: 5+ years historical data
+- **History**: 5+ years historical EOD data
 
 ### **Database**
 - **Engine**: DuckDB (high-performance)
