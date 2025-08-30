@@ -30,13 +30,17 @@ except ImportError as e:
 
 # Import FNO RAG system
 try:
-    from src.fno_rag import FNOEngine
-    print("✅ Successfully imported FNOEngine")
+    from src.fno_rag import FNOEngine, ENHANCED_VECTOR_STORE_AVAILABLE
+    print("✅ Successfully imported Enhanced FNOEngine")
     fno_engine = None  # Will be initialized on first use
     # Don't pre-initialize to avoid database conflicts
-    print("💡 FNO RAG System will be initialized on demand")
+    print("💡 Enhanced FNO RAG System will be initialized on demand")
+    if ENHANCED_VECTOR_STORE_AVAILABLE:
+        print("🚀 Enhanced Vector Store is available")
+    else:
+        print("⚠️ Enhanced Vector Store not available, using fallback")
 except ImportError as e:
-    print(f"⚠️ FNO RAG system not available: {e}")
+    print(f"⚠️ Enhanced FNO RAG system not available: {e}")
     fno_engine = None
 
 # Initialize the Dash app
@@ -88,14 +92,14 @@ def get_fallback_response(query):
         return "🤖 AI Assistant: I'm here to help with stock analysis. Please ensure the FNO RAG system is initialized for detailed predictions."
 
 def initialize_fno_engine():
-    """Initialize FNO engine on first use."""
+    """Initialize enhanced FNO engine on first use."""
     global fno_engine
     if fno_engine is not None:
-        print("✅ FNO RAG System already initialized!")
+        print("✅ Enhanced FNO RAG System already initialized!")
         return True
     
     try:
-        print("🚀 Initializing FNO RAG System...")
+        print("🚀 Initializing Enhanced FNO RAG System...")
         import time
         
         # Try multiple times with increasing delays
@@ -108,7 +112,20 @@ def initialize_fno_engine():
                     time.sleep(wait_time)
                 
                 fno_engine = FNOEngine()
-                print("✅ FNO RAG System initialized successfully!")
+                
+                # Get system status to show enhanced features
+                status = fno_engine.get_system_status()
+                
+                if status.get('enhanced_mode'):
+                    print("🚀 Enhanced FNO RAG System initialized successfully!")
+                    if 'vector_store_stats' in status:
+                        stats = status['vector_store_stats']
+                        print(f"   📊 Vector Store: {stats.get('total_snapshots', 0)} snapshots")
+                        print(f"   🔍 Embedding Dimension: {stats.get('embedding_dimension', 'Unknown')}")
+                    print("   🤖 Enhanced RAG with semantic embeddings available")
+                else:
+                    print("✅ FNO RAG System initialized (fallback mode)")
+                
                 return True
                 
             except Exception as e:
@@ -126,11 +143,11 @@ def initialize_fno_engine():
                     break
                     
     except Exception as e:
-        print(f"❌ Failed to initialize FNO RAG System: {e}")
+        print(f"❌ Failed to initialize Enhanced FNO RAG System: {e}")
     
     # If we get here, initialization failed
     print("💡 Using fallback mode - chat will work with basic responses")
-    print("💡 The FNO RAG system will be available when database is free")
+    print("💡 The Enhanced FNO RAG system will be available when database is free")
     return False
 
 def safe_get_component(component_id, default_value=None):
@@ -312,7 +329,7 @@ app.layout = dbc.Container([
         dbc.Col([
             dbc.Card([
                 dbc.CardHeader([
-                    "💬 Natural Language Chat",
+                    "🚀 Enhanced Natural Language Chat",
                     html.Small(" (Click 'Initialize AI Chat' to start)", className="text-muted ms-2")
                 ]),
                 dbc.CardBody([
@@ -335,10 +352,10 @@ app.layout = dbc.Container([
                         html.H6("💡 Example Questions:", className="mt-3 mb-2"),
                         html.Ul([
                             html.Li("What's the probability of NIFTY moving up tomorrow?"),
+                            html.Li("Find similar cases where BANKNIFTY rose with high Put OI"),
                             html.Li("Predict RELIANCE movement for next month"),
-                            html.Li("What's the chance of TCS going down this week?"),
-                            html.Li("Show me INFY probability for tomorrow"),
-                            html.Li("Which stocks have high probability of moving up today?")
+                            html.Li("Show me cases where TCS had low PCR and moved up"),
+                            html.Li("Based on current FNO data, how much can CANBANK move?")
                         ], className="text-muted small")
                     ], id="chat-examples", style={'display': 'block'})
                 ])
@@ -1037,11 +1054,14 @@ def initialize_chat(n_clicks):
         engine_initialized = initialize_fno_engine()
         
         if engine_initialized:
-            # FNO engine initialized successfully
-            return False, "💬 Ask me anything about stocks, market predictions, or trading strategies...", False, {'display': 'none'}
+            # Enhanced FNO engine initialized successfully
+            if fno_engine and fno_engine.get_system_status().get('enhanced_mode'):
+                return False, "🚀 Enhanced AI Chat: Ask me anything about stocks, market predictions, or trading strategies with semantic RAG analysis...", False, {'display': 'none'}
+            else:
+                return False, "💬 AI Chat: Ask me anything about stocks, market predictions, or trading strategies...", False, {'display': 'none'}
         else:
             # FNO engine failed, but enable chat with fallback responses
-            return False, "💬 Chat enabled with basic responses (FNO system unavailable)", False, {'display': 'block'}
+            return False, "💬 Chat enabled with basic responses (Enhanced FNO system unavailable)", False, {'display': 'block'}
             
     except Exception as e:
         # Even if there's an error, enable chat with fallback

@@ -1,27 +1,47 @@
 #!/usr/bin/env python3
 """
 FNO RAG System - Futures & Options RAG with ML Integration
-Unified probability prediction system combining ML and RAG for FNO analysis.
+Enhanced version with semantic embeddings and advanced vector store.
 """
 
-__version__ = "1.0.0"
-__author__ = "AI Hedge Fund Team"
-
-from .core.fno_engine import FNOEngine
+from .core.enhanced_fno_engine import EnhancedFNOEngine, FNOEngine
+from .models.data_models import (
+    HorizonType, ProbabilityResult, PredictionRequest,
+    FNOSearchQuery, FNOSearchResult, MarketCondition, RAGResult
+)
 from .core.probability_predictor import FNOProbabilityPredictor
-from .models.data_models import FNOData, ProbabilityResult, PredictionRequest, HorizonType
+from .core.data_processor import FNODataProcessor
+from .ml.probability_models import FNOProbabilityModels
 from .api.chat_interface import FNOChatInterface
-from .backtesting import FNOBacktestEngine, BacktestResult, BacktestSummary
+from .utils.embedding_utils import EmbeddingUtils
+
+# Import enhanced vector store if available
+try:
+    from build_enhanced_vector_store import EnhancedFNOVectorStore
+    ENHANCED_VECTOR_STORE_AVAILABLE = True
+except ImportError:
+    ENHANCED_VECTOR_STORE_AVAILABLE = False
+    from .rag.vector_store import FNOVectorStore
+
+__version__ = "2.0.0"
+__author__ = "MokshTechandInvestment"
+__description__ = "Enhanced FNO RAG System with Semantic Embeddings"
 
 __all__ = [
     'FNOEngine',
+    'EnhancedFNOEngine',
     'FNOProbabilityPredictor',
-    'FNOData',
+    'FNODataProcessor',
+    'FNOProbabilityModels',
+    'FNOChatInterface',
+    'EmbeddingUtils',
+    'EnhancedFNOVectorStore' if ENHANCED_VECTOR_STORE_AVAILABLE else 'FNOVectorStore',
+    'HorizonType',
     'ProbabilityResult',
     'PredictionRequest',
-    'HorizonType',
-    'FNOChatInterface',
-    'FNOBacktestEngine',
-    'BacktestResult',
-    'BacktestSummary'
+    'FNOSearchQuery',
+    'FNOSearchResult',
+    'MarketCondition',
+    'RAGResult',
+    'ENHANCED_VECTOR_STORE_AVAILABLE'
 ]
