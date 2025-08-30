@@ -340,6 +340,8 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 ## 🎉 **Ready to Trade with AI!**
 
+**⚠️ DISCLAIMER: This is only for educational purposes and not for actual trading and analysis**
+
 **Your enhanced AI Hedge Fund system is ready with:**
 - ✅ **26,816 Market Snapshots** for intelligent analysis
 - ✅ **Enhanced RAG System** with semantic search
@@ -348,6 +350,8 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - ✅ **Modern Web Interface** for seamless interaction
 
 **Start your AI-powered trading journey today!** 🚀
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ---
 
