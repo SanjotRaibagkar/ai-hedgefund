@@ -218,14 +218,14 @@ poetry run python src/ui/web_app/app.py
 
 ### **Enhanced Vector Store**
 - **Search Speed**: ~1ms per query
-- **Accuracy**: 95%+ semantic similarity
+- **Semantic Similarity**: 95%+ match quality
 - **Storage**: ~50MB for 6 months data
 - **Memory**: ~200MB loaded index
 
 ### **ML Models**
 - **Training Time**: 5-10 minutes
 - **Prediction Speed**: <100ms
-- **Accuracy**: 70-85% (market conditions)
+- **Model Performance**: Optimized for market conditions
 - **Coverage**: 240+ symbols
 
 ### **Data Collection**
@@ -307,13 +307,13 @@ poetry run python analyze_vector_store.py
 
 ## 🎯 **Roadmap**
 
-### **Q4 2025**
+### 
 - [ ] **Real-time Trading Integration**
 - [ ] **Advanced Risk Management**
 - [ ] **Portfolio Optimization**
 - [ ] **Multi-exchange Support**
 
-### **Q1 2026**
+### 
 - [ ] **Advanced AI Agents**
 - [ ] **Sentiment Analysis**
 - [ ] **News Integration**
@@ -321,7 +321,7 @@ poetry run python analyze_vector_store.py
 
 ## 🤝 **Contributing**
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
 
 ### **Code Standards**
 - **Python**: PEP 8 compliance
