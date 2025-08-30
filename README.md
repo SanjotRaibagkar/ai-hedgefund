@@ -219,8 +219,14 @@ poetry run python src/ui/web_app/app.py
 ### **Enhanced Vector Store**
 - **Search Speed**: ~1ms per query
 - **Semantic Similarity**: 95%+ match quality
-- **Storage**: ~50MB for 6 months data
+- **Storage**: ~50MB for 6 months FNO data
 - **Memory**: ~200MB loaded index
+
+### **EOD Data Storage**
+- **Coverage**: 5+ years of historical EOD data
+- **Symbols**: 2,000+ equity symbols
+- **Data Size**: 15M+ records in DuckDB
+- **Performance**: Sub-second query response
 
 ### **ML Models**
 - **Training Time**: 5-10 minutes
