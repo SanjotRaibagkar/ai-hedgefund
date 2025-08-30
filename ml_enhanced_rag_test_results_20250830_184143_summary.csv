@@ -1,0 +1,5 @@
+test_type,success_rate_percent,avg_response_time_ms,avg_probability,avg_confidence,total_tests,avg_similar_cases,avg_return_percent,avg_response_length,avg_search_time_ms,avg_similarity
+ML_Prediction,0.0,0.0,0.0,0.0,30,,,,,
+RAG_Analysis,100.0,67.78,,,10,3.0,0.0,,,
+Chat_Interface,100.0,25.58,,,10,,,316.0,,
+Vector_Store_Performance,0.0,,,,1,,,,0.0,0.0
