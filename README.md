@@ -331,7 +331,10 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 ## 📄 **License**
 
-This project is proprietary software developed by **MokshTechandInvestment**. All rights reserved.
+- [Options Data Collection](docs/OPTIONS_DATA_COLLECTION.md)
+- [Database Status](docs/DATABASE_STATUS_REPORT.md)
+- [Setup Guide](docs/SETUP_GUIDE.md)
+- [Usage Guide](docs/USAGE_GUIDE.md)
 
 ---
 
