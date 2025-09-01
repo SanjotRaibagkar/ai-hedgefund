@@ -323,6 +323,92 @@ class OptionsAnalyzerV2:
             'skew_interpretation': 'Put skew (Bearish)' if iv_skew > 2 else 'Call skew (Bullish)' if iv_skew < -2 else 'Neutral'
         }
     
+    def estimate_spot_price(self, snapshot, target_time):
+        """
+        Advanced spot price estimation using multiple factors
+        """
+        current_expiry = snapshot['Expiry_Date'].min()
+        current_exp_data = snapshot[snapshot['Expiry_Date'] == current_expiry]
+        
+        # Method 1: Strike with highest total OI (baseline)
+        current_exp_data['Total_OI'] = current_exp_data['CALLS_OI'] + current_exp_data['PUTS_OI']
+        max_oi_strike = current_exp_data.loc[current_exp_data['Total_OI'].idxmax(), 'Strike_Price']
+        
+        # Method 2: Strike with highest volume (more active trading)
+        current_exp_data['Total_Volume'] = current_exp_data['CALLS_Volume'] + current_exp_data['PUTS_Volume']
+        max_vol_strike = current_exp_data.loc[current_exp_data['Total_Volume'].idxmax(), 'Strike_Price']
+        
+        # Method 3: Strike with highest price change (momentum indicator)
+        current_exp_data['Total_Price_Change'] = (
+            current_exp_data['CALLS_Net_Chng'].abs() + current_exp_data['PUTS_Net_Chng'].abs()
+        )
+        max_change_strike = current_exp_data.loc[current_exp_data['Total_Price_Change'].idxmax(), 'Strike_Price']
+        
+        # Method 4: Mid-range of strikes with significant OI
+        significant_oi_threshold = current_exp_data['Total_OI'].max() * 0.3
+        significant_strikes = current_exp_data[current_exp_data['Total_OI'] >= significant_oi_threshold]['Strike_Price']
+        mid_significant_strike = significant_strikes.median()
+        
+        # Method 5: Market movement analysis (if we have previous data)
+        market_movement = 0
+        try:
+            # Get data from 30 minutes ago to detect trend
+            target_datetime = pd.to_datetime(f"{self.current_date} {target_time}")
+            lookback_time = target_datetime - pd.Timedelta(minutes=30)
+            
+            if hasattr(self, 'df') and self.df is not None:
+                lookback_data = self.df[
+                    (self.df['Fetch_Time'] >= lookback_time) & 
+                    (self.df['Fetch_Time'] < target_datetime)
+                ]
+                
+                if len(lookback_data) > 0:
+                    lookback_exp_data = lookback_data[lookback_data['Expiry_Date'] == current_expiry]
+                    if len(lookback_exp_data) > 0:
+                        lookback_max_oi_strike = lookback_exp_data.loc[lookback_exp_data['Total_OI'].idxmax(), 'Strike_Price']
+                        market_movement = max_oi_strike - lookback_max_oi_strike
+        except:
+            market_movement = 0
+        
+        # Weighted combination of methods
+        weights = {
+            'max_oi': 0.35,      # Highest weight for OI-based estimation
+            'max_volume': 0.25,  # Volume indicates active trading
+            'max_change': 0.20,  # Price changes show momentum
+            'mid_significant': 0.15,  # Mid-range of significant strikes
+            'market_movement': 0.05   # Trend adjustment
+        }
+        
+        # Calculate weighted spot price
+        weighted_spot = (
+            max_oi_strike * weights['max_oi'] +
+            max_vol_strike * weights['max_volume'] +
+            max_change_strike * weights['max_change'] +
+            mid_significant_strike * weights['mid_significant']
+        )
+        
+        # Apply market movement adjustment
+        if abs(market_movement) > 50:  # Only adjust if significant movement
+            weighted_spot += market_movement * weights['market_movement']
+        
+        # Round to nearest 50 (typical Nifty strike interval)
+        final_spot = round(weighted_spot / 50) * 50
+        
+        # Ensure spot is within reasonable range
+        min_strike = current_exp_data['Strike_Price'].min()
+        max_strike = current_exp_data['Strike_Price'].max()
+        final_spot = max(min_strike, min(max_strike, final_spot))
+        
+        print(f"   📍 Advanced Spot Price Estimation:")
+        print(f"      Max OI Strike: {max_oi_strike:,}")
+        print(f"      Max Volume Strike: {max_vol_strike:,}")
+        print(f"      Max Change Strike: {max_change_strike:,}")
+        print(f"      Mid Significant Strike: {mid_significant_strike:,}")
+        print(f"      Market Movement: {market_movement:+,}")
+        print(f"      Final Estimated Spot: {final_spot:,}")
+        
+        return final_spot
+    
     def generate_prediction_signal(self, target_time="13:30:00", spot_price=None):
         """
         Main function to generate prediction signal
@@ -335,16 +421,7 @@ class OptionsAnalyzerV2:
         
         # Estimate spot price if not provided
         if spot_price is None:
-            # Use the strike with highest total OI as proxy for spot (more accurate)
-            current_expiry = snapshot['Expiry_Date'].min()
-            current_exp_data = snapshot[snapshot['Expiry_Date'] == current_expiry]
-            current_exp_data['Total_OI'] = current_exp_data['CALLS_OI'] + current_exp_data['PUTS_OI']
-            
-            # Find the strike with highest total OI (usually closest to actual spot)
-            max_oi_strike = current_exp_data.loc[current_exp_data['Total_OI'].idxmax(), 'Strike_Price']
-            spot_price = float(max_oi_strike)
-            
-            print(f"   📍 Estimated spot price: {spot_price:,} (from max OI strike)")
+            spot_price = self.estimate_spot_price(snapshot, target_time)
         
         # Calculate all indicators
         pcr_data = self.calculate_pcr_indicators(snapshot)
@@ -358,63 +435,112 @@ class OptionsAnalyzerV2:
         signal_score = 0
         signal_components = []
         
-        # PCR signals (weight: 25%)
-        if pcr_data.get('pcr_oi', 1) < 0.8:
-            signal_score += 0.25
-            signal_components.append("Bullish PCR")
-        elif pcr_data.get('pcr_oi', 1) > 1.2:
-            signal_score -= 0.25
-            signal_components.append("Bearish PCR")
+        # PCR signals (weight: 20%)
+        if pcr_data.get('pcr_oi', 1) < 0.7:
+            signal_score += 0.15
+            signal_components.append("Strong Bullish PCR")
+        elif pcr_data.get('pcr_oi', 1) < 0.85:
+            signal_score += 0.08
+            signal_components.append("Mild Bullish PCR")
+        elif pcr_data.get('pcr_oi', 1) > 1.3:
+            signal_score -= 0.15
+            signal_components.append("Strong Bearish PCR")
+        elif pcr_data.get('pcr_oi', 1) > 1.15:
+            signal_score -= 0.08
+            signal_components.append("Mild Bearish PCR")
+        else:
+            signal_score += 0.0
+            signal_components.append("Neutral PCR")
         
-        # Max Pain signal (weight: 20%)
+        # PCR Volume signals (weight: 10%)
+        if pcr_data.get('pcr_volume', 1) < 0.7:
+            signal_score += 0.10
+            signal_components.append("Strong Bullish PCR Volume")
+        elif pcr_data.get('pcr_volume', 1) < 0.85:
+            signal_score += 0.05
+            signal_components.append("Mild Bullish PCR Volume")
+        elif pcr_data.get('pcr_volume', 1) > 1.3:
+            signal_score -= 0.10
+            signal_components.append("Strong Bearish PCR Volume")
+        elif pcr_data.get('pcr_volume', 1) > 1.15:
+            signal_score -= 0.05
+            signal_components.append("Mild Bearish PCR Volume")
+        else:
+            signal_score += 0.0
+            signal_components.append("Neutral PCR Volume")
+        
+        # Max Pain signal (weight: 15%)
         if max_pain is not None:
             pain_distance = (spot_price - max_pain) / spot_price * 100
-            if pain_distance > 1:  # Spot significantly above max pain
+            print(f"   🎯 Max Pain Analysis: Max Pain={max_pain:,}, Spot={spot_price:,}, Distance={pain_distance:.2f}%")
+            
+            if pain_distance > 2.0:  # Spot significantly above max pain (more bearish)
                 signal_score -= 0.15
                 signal_components.append("Above Max Pain (Bearish)")
-            elif pain_distance < -1:  # Spot significantly below max pain
+            elif pain_distance > 0.8:  # Spot moderately above max pain
+                signal_score -= 0.08
+                signal_components.append("Slightly Above Max Pain (Mild Bearish)")
+            elif pain_distance < -2.0:  # Spot significantly below max pain (more bullish)
                 signal_score += 0.15
                 signal_components.append("Below Max Pain (Bullish)")
-            else:  # Spot near max pain (neutral)
+            elif pain_distance < -0.8:  # Spot moderately below max pain
+                signal_score += 0.08
+                signal_components.append("Slightly Below Max Pain (Mild Bullish)")
+            else:  # Spot very close to max pain (neutral)
+                signal_score += 0.0
                 signal_components.append("Near Max Pain (Neutral)")
         
-        # Flow analysis (weight: 30%)
+        # Flow analysis (weight: 25%)
         if 'flow_bias' in flow_data:
             print(f"   🔄 Flow Analysis: {flow_data['flow_bias']} (Call: {flow_data.get('net_call_pressure', 0):,.0f}, Put: {flow_data.get('net_put_pressure', 0):,.0f}, Ratio: {flow_data.get('pressure_ratio', 0):.1%})")
             if flow_data['flow_bias'] == 'Bullish':
-                signal_score += 0.3
+                signal_score += 0.25
                 signal_components.append("Bullish Flow")
-            else:
-                signal_score -= 0.3
+            elif flow_data['flow_bias'] == 'Bearish':
+                signal_score -= 0.25
                 signal_components.append("Bearish Flow")
+            else:  # Neutral flow
+                signal_score += 0.0  # No penalty for neutral
+                signal_components.append("Neutral Flow")
         
-        # IV Skew (weight: 15%)
-        if iv_data.get('iv_skew', 0) > 2:
-            signal_score -= 0.15
-            signal_components.append("Put Skew (Bearish)")
-        elif iv_data.get('iv_skew', 0) < -2:
-            signal_score += 0.15
-            signal_components.append("Call Skew (Bullish)")
+        # IV Skew (weight: 20%)
+        if iv_data.get('iv_skew', 0) > 3:
+            signal_score -= 0.20
+            signal_components.append("Strong Put Skew (Bearish)")
+        elif iv_data.get('iv_skew', 0) > 1.5:
+            signal_score -= 0.10
+            signal_components.append("Mild Put Skew (Bearish)")
+        elif iv_data.get('iv_skew', 0) < -3:
+            signal_score += 0.20
+            signal_components.append("Strong Call Skew (Bullish)")
+        elif iv_data.get('iv_skew', 0) < -1.5:
+            signal_score += 0.10
+            signal_components.append("Mild Call Skew (Bullish)")
+        else:
+            signal_score += 0.0
+            signal_components.append("Neutral IV Skew")
         
         # Gamma environment (weight: 10%)
         if 'error' not in gamma_data and gamma_data.get('net_gamma_exposure', 0) > 0:
+            signal_score += 0.05
             signal_components.append("Positive Gamma (Range-bound)")
         elif 'error' not in gamma_data:
+            signal_score -= 0.05
             signal_components.append("Negative Gamma (Trending)")
         else:
             signal_components.append("Gamma data unavailable")
         
         # Final interpretation
-        if signal_score > 0.3:
+        if signal_score > 0.25:
             direction = "BULLISH"
             confidence = "HIGH"
-        elif signal_score > 0.1:
+        elif signal_score > 0.08:
             direction = "BULLISH"
             confidence = "MEDIUM"
-        elif signal_score > -0.1:
+        elif signal_score > -0.08:
             direction = "NEUTRAL"
             confidence = "LOW"
-        elif signal_score > -0.3:
+        elif signal_score > -0.25:
             direction = "BEARISH"
             confidence = "MEDIUM"
         else:

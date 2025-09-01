@@ -149,7 +149,10 @@ def main():
     # Example 2: Analyze date range
     print(f"\n{'='*80}")
     print("\n📊 EXAMPLE 2: Analyze date range")
-    result2 = predict_week_range("20250825", "20250829", output_file="week_range_predictions.csv")
+    result2 = predict_week_range("20250825", "20250829")
+    if result2 is not None:
+        result2.to_csv("week_range_predictions.csv", index=False)
+        print("💾 Week range results saved to: week_range_predictions.csv")
     
     # Example 3: Custom time slots
     print(f"\n{'='*80}")

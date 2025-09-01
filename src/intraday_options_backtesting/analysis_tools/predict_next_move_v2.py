@@ -149,21 +149,5 @@ def main():
         print(f"🎯 Next Move: {result['direction']} ({result['confidence']} confidence)")
 
 if __name__ == "__main__":
-    # Example usage without command line arguments
-    print("🔮 NIFTY OPTIONS NEXT MOVE PREDICTOR")
-    print("=" * 80)
-    
-    # You can call this function directly
-    # Example 1: Predict for August 29, 2025 at 1:30 PM
-    print("\n📊 EXAMPLE 1: August 29, 2025 at 1:30 PM")
-    result1 = predict_next_move("20250829", "13:30:00")
-    
-    # Example 2: Predict for August 29, 2025 at 11:00 AM
-    print(f"\n{'='*80}")
-    print("\n📊 EXAMPLE 2: August 29, 2025 at 11:00 AM")
-    result2 = predict_next_move("20250829", "11:00:00")
-    
-    # Example 3: Predict with custom spot price
-    print(f"\n{'='*80}")
-    print("\n📊 EXAMPLE 3: August 29, 2025 at 2:00 PM with custom spot")
-    result3 = predict_next_move("20250829", "14:00:00", spot_price=24500)
+    # Run command line interface
+    main()

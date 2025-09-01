@@ -1,0 +1,9 @@
+date,time,direction,confidence,signal_score,spot_estimate,pcr_oi,pcr_sentiment,max_pain,flow_bias,gamma_environment,iv_skew,key_factors
+20250829,09:30:00,BULLISH,HIGH,0.55,24500.0,0.6461583930685231,Mild Bullish,24550,Bullish,Negative Gamma (Amplifying),-1.3469767441860476,"Bullish PCR, Near Max Pain (Neutral), Bullish Flow, Negative Gamma (Trending)"
+20250829,11:00:00,NEUTRAL,LOW,-0.04999999999999999,24500.0,0.7486356202015539,Mild Bullish,24550,Neutral,Negative Gamma (Amplifying),-1.0765116279069744,"Bullish PCR, Near Max Pain (Neutral), Bearish Flow, Negative Gamma (Trending)"
+20250829,13:30:00,NEUTRAL,LOW,-0.04999999999999999,24500.0,0.7100382555525402,Mild Bullish,24550,Neutral,Negative Gamma (Amplifying),-1.5011627906976734,"Bullish PCR, Near Max Pain (Neutral), Bearish Flow, Negative Gamma (Trending)"
+20250829,15:00:00,NEUTRAL,LOW,0.1,24500.0,0.637422087026047,Neutral,24500,Neutral,Negative Gamma (Amplifying),-2.676511627906976,"Bullish PCR, Near Max Pain (Neutral), Bearish Flow, Call Skew (Bullish), Negative Gamma (Trending)"
+20250827,09:30:00,NEUTRAL,LOW,0.1,25000.0,0.5673099647489346,Neutral,24800,Neutral,Negative Gamma (Amplifying),-6.390416666666663,"Bullish PCR, Near Max Pain (Neutral), Bearish Flow, Call Skew (Bullish), Negative Gamma (Trending)"
+20250827,11:00:00,NEUTRAL,LOW,0.1,25000.0,0.5673099647489346,Neutral,24800,Neutral,Negative Gamma (Amplifying),-6.390416666666663,"Bullish PCR, Near Max Pain (Neutral), Bearish Flow, Call Skew (Bullish), Negative Gamma (Trending)"
+20250827,13:30:00,NEUTRAL,LOW,0.1,25000.0,0.5673099647489346,Neutral,24800,Neutral,Negative Gamma (Amplifying),-6.390416666666663,"Bullish PCR, Near Max Pain (Neutral), Bearish Flow, Call Skew (Bullish), Negative Gamma (Trending)"
+20250827,15:00:00,NEUTRAL,LOW,0.1,25000.0,0.5673099647489346,Neutral,24800,Neutral,Negative Gamma (Amplifying),-6.390416666666663,"Bullish PCR, Near Max Pain (Neutral), Bearish Flow, Call Skew (Bullish), Negative Gamma (Trending)"
