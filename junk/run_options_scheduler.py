@@ -13,9 +13,83 @@ import time
 import schedule
 from datetime import datetime, date
 from loguru import logger
+import tempfile
+import atexit
 
 from src.screening.fixed_enhanced_options_analyzer import FixedEnhancedOptionsAnalyzer
 from src.nsedata.NseUtility import NseUtils
+
+
+class ProcessLock:
+    """Cross-platform process lock to prevent duplicate instances."""
+    
+    def __init__(self, lock_file="options_scheduler.lock"):
+        self.lock_file = lock_file
+        self.lock_fd = None
+        self.lock_acquired = False
+        
+        # Register cleanup on exit
+        atexit.register(self.release)
+    
+    def acquire(self):
+        """Acquire the lock using file-based locking."""
+        try:
+            # Check if lock file exists and contains a valid PID
+            if os.path.exists(self.lock_file):
+                try:
+                    with open(self.lock_file, 'r') as f:
+                        pid = int(f.read().strip())
+                    
+                    # Check if the process is still running
+                    if self._is_process_running(pid):
+                        logger.error(f"❌ Another instance (PID: {pid}) is already running")
+                        return False
+                    else:
+                        logger.warning(f"⚠️ Found stale lock file from PID {pid}, removing...")
+                        os.unlink(self.lock_file)
+                except (ValueError, FileNotFoundError):
+                    # Invalid lock file, remove it
+                    try:
+                        os.unlink(self.lock_file)
+                    except FileNotFoundError:
+                        pass
+            
+            # Create lock file with current PID
+            self.lock_fd = open(self.lock_file, 'w')
+            self.lock_fd.write(str(os.getpid()))
+            self.lock_fd.flush()
+            self.lock_acquired = True
+            
+            logger.info(f"🔒 Process lock acquired: {self.lock_file} (PID: {os.getpid()})")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to acquire lock: {e}")
+            return False
+    
+    def _is_process_running(self, pid):
+        """Check if a process is running (cross-platform)."""
+        try:
+            if os.name == 'nt':  # Windows
+                import psutil
+                return psutil.pid_exists(pid)
+            else:  # Unix/Linux
+                os.kill(pid, 0)
+                return True
+        except (OSError, ImportError):
+            return False
+    
+    def release(self):
+        """Release the lock."""
+        if self.lock_acquired and self.lock_fd:
+            try:
+                self.lock_fd.close()
+                if os.path.exists(self.lock_file):
+                    os.unlink(self.lock_file)
+                self.lock_acquired = False
+                logger.info("🔓 Process lock released")
+            except Exception as e:
+                logger.error(f"❌ Error releasing lock: {e}")
 
 
 class EnhancedOptionsScheduler:
@@ -29,6 +103,9 @@ class EnhancedOptionsScheduler:
         # Market hours (IST)
         self.market_open = "09:30"
         self.market_close = "15:30"
+        
+        # Process lock
+        self.process_lock = ProcessLock()
         
         logger.info("🚀 Enhanced Options Scheduler initialized")
         logger.info(f"📅 Market hours: {self.market_open} - {self.market_close} IST")
@@ -110,47 +187,57 @@ class EnhancedOptionsScheduler:
     
     def start_scheduler(self):
         """Start the enhanced options analysis scheduler."""
-        logger.info("🚀 Starting Enhanced Options Scheduler")
-        logger.info("📅 Will automatically stop at 3:30 PM IST")
-        logger.info("📅 Will not run on weekends or trading holidays")
-        logger.info("⏰ Analysis interval: Every 15 minutes during market hours")
+        # Try to acquire process lock
+        if not self.process_lock.acquire():
+            logger.error("❌ Another instance is already running. Exiting.")
+            return
         
-        # Schedule NIFTY analysis every 15 minutes
-        schedule.every(15).minutes.do(self.run_options_analysis, 'NIFTY')
-        
-        # Schedule BANKNIFTY analysis every 15 minutes (with 5 second delay)
-        schedule.every(15).minutes.do(lambda: time.sleep(5) or self.run_options_analysis('BANKNIFTY'))
-        
-        # Run initial analysis if conditions are met
-        logger.info("📊 Running initial analysis...")
-        self.run_options_analysis('NIFTY')
-        time.sleep(5)
-        self.run_options_analysis('BANKNIFTY')
-        
-        # Keep scheduler running
-        while True:
-            try:
-                current_time = datetime.now().strftime('%H:%M')
-                
-                # Check if market is closed
-                if current_time > self.market_close:
-                    logger.info(f"⏰ {current_time} - Market closed, stopping scheduler")
+        try:
+            logger.info("🚀 Starting Enhanced Options Scheduler")
+            logger.info("📅 Will automatically stop at 3:30 PM IST")
+            logger.info("📅 Will not run on weekends or trading holidays")
+            logger.info("⏰ Analysis interval: Every 15 minutes during market hours")
+            
+            # Schedule NIFTY analysis every 15 minutes
+            schedule.every(15).minutes.do(self.run_options_analysis, 'NIFTY')
+            
+            # Schedule BANKNIFTY analysis every 15 minutes (with 5 second delay)
+            schedule.every(15).minutes.do(lambda: time.sleep(5) or self.run_options_analysis('BANKNIFTY'))
+            
+            # Run initial analysis if conditions are met
+            logger.info("📊 Running initial analysis...")
+            self.run_options_analysis('NIFTY')
+            time.sleep(5)
+            self.run_options_analysis('BANKNIFTY')
+            
+            # Keep scheduler running
+            while True:
+                try:
+                    current_time = datetime.now().strftime('%H:%M')
+                    
+                    # Check if market is closed
+                    if current_time > self.market_close:
+                        logger.info(f"⏰ {current_time} - Market closed, stopping scheduler")
+                        break
+                    
+                    # Run pending scheduled tasks
+                    schedule.run_pending()
+                    
+                    # Sleep for 1 minute
+                    time.sleep(60)
+                    
+                except KeyboardInterrupt:
+                    logger.info("🛑 Scheduler stopped by user")
                     break
-                
-                # Run pending scheduled tasks
-                schedule.run_pending()
-                
-                # Sleep for 1 minute
-                time.sleep(60)
-                
-            except KeyboardInterrupt:
-                logger.info("🛑 Scheduler stopped by user")
-                break
-            except Exception as e:
-                logger.error(f"❌ Scheduler error: {e}")
-                time.sleep(60)  # Continue running
-        
-        logger.info("✅ Enhanced Options Scheduler stopped")
+                except Exception as e:
+                    logger.error(f"❌ Scheduler error: {e}")
+                    time.sleep(60)  # Continue running
+            
+            logger.info("✅ Enhanced Options Scheduler stopped")
+            
+        finally:
+            # Always release the lock
+            self.process_lock.release()
 
 
 def run_options_analysis(index: str = 'NIFTY'):
