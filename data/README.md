@@ -143,15 +143,27 @@ poetry run python start_auto_options_collector.py
 ## 📈 Data Analysis
 
 ### Options Analysis
-**Analyzer**: `src/screening/fixed_enhanced_options_analyzer.py`  
+**Primary Analyzer**: `src/intraday_options_backtesting/analysis_tools/options_analyzer_v2.py`  
+**Legacy Analyzer**: `src/screening/fixed_enhanced_options_analyzer.py`  
 **Output**: `results/options_tracker/option_tracker.csv`  
 
-**Analysis Features**:
-- ✅ ATM ± 2 strikes analysis
-- ✅ PCR (Put-Call Ratio) calculation
-- ✅ OI (Open Interest) analysis
-- ✅ Signal generation
-- ✅ Trade recommendations
+**V2 Analysis Features**:
+- ✅ **Advanced Spot Price Estimation**: Multi-factor estimation using Max OI, Volume, Price Change, and Market Movement
+- ✅ **Enhanced PCR Analysis**: Both OI-based and Volume-based Put-Call Ratio calculations
+- ✅ **Improved Max Pain Analysis**: Granular thresholds (0.8%, 2.0%) for better signal classification
+- ✅ **Balanced Scoring System**: Reduced bullish bias with more accurate predictions
+- ✅ **Flow Dynamics**: Enhanced call vs put pressure analysis with proper neutral classification
+- ✅ **IV Skew Analysis**: Implied Volatility skew interpretation
+- ✅ **Gamma Environment**: Positive/Negative gamma exposure analysis
+- ✅ **Support/Resistance Levels**: Key technical levels identification
+- ✅ **Unusual Activity Detection**: Detection of unusual options activity
+
+**V2 Tools**:
+- `predict_next_move_v2.py` - Single prediction tool with automatic spot price estimation
+- `batch_predictor_v2.py` - Multiple date analysis with CSV output
+- `test_options_analyzer_v2.py` - Testing and validation suite
+- `validate_options_analyzer_v2.py` - Data quality validation
+- `USAGE_GUIDE.md` - Comprehensive usage documentation
 
 ### Equity Screening
 **Screener**: `src/screening/enhanced_eod_screener.py`  
