@@ -10,7 +10,17 @@ from pathlib import Path
 import argparse
 from datetime import datetime
 
-def predict_next_move(date_str, time_str="13:30:00", spot_price=None, parquet_path="../../../data/options_parquet"):
+def predict_next_move(date_str, time_str="13:30:00", spot_price=None, parquet_path=None):
+    # Auto-detect the correct parquet path based on current working directory
+    if parquet_path is None:
+        import os
+        current_dir = os.getcwd()
+        if "analysis_tools" in current_dir:
+            # Running from analysis_tools directory
+            parquet_path = "../../../data/options_parquet"
+        else:
+            # Running from project root
+            parquet_path = "data/options_parquet"
     """
     Predict the next move for a specific date and time
     
@@ -128,7 +138,7 @@ def main():
     parser.add_argument('date', help='Date in YYYYMMDD format (e.g., 20250829)')
     parser.add_argument('--time', default='13:30:00', help='Time to analyze (default: 13:30:00)')
     parser.add_argument('--spot', type=float, help='Override spot price')
-    parser.add_argument('--path', default='../../../data/options_parquet', help='Path to parquet files')
+    parser.add_argument('--path', default=None, help='Path to parquet files (auto-detected if not specified)')
     
     args = parser.parse_args()
     

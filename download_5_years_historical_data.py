@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download 5 Years Historical EOD Data
+Download Historical EOD Data (2019-01-01 to Current)
 Optimized threaded download for maximum performance.
 """
 
@@ -10,17 +10,18 @@ from datetime import datetime
 from src.data.downloaders.eod_extra_data_downloader import EODExtraDataDownloader
 
 def main():
-    """Download 5 years of historical EOD data using threaded approach."""
-    print("🚀 EOD EXTRA DATA - 5 YEARS HISTORICAL DOWNLOAD")
+    """Download historical EOD data from 2019-01-01 to current date using threaded approach."""
+    print("🚀 EOD EXTRA DATA - HISTORICAL DOWNLOAD (2019-01-01 to Current)")
     print("=" * 80)
     print("⚡ Using Optimized Threaded Download")
     print("🔧 Configuration: 10 threads, 0.2s delay between requests")
-    print("📊 Expected: ~46M records, ~6 minutes download time")
+    print("📊 Expected: ~60M records, ~8-12 minutes download time")
+    print("📅 Date Range: 2019-01-01 to Current Date")
     print("=" * 80)
     
     # Initialize downloader
     print("🔧 Initializing EOD Extra Data Downloader...")
-    downloader = EODExtraDataDownloader()
+    downloader = EODExtraDataDownloader(force_recreate_tables=False)
     
     # Show current progress
     print("\n📈 Current Progress:")
@@ -39,26 +40,37 @@ def main():
         print()
     
     # Confirm download
-    print("⚠️  WARNING: This will download ~46M records and may take 6-10 minutes.")
-    print("💾 Ensure you have sufficient disk space (~50MB).")
+    print("⚠️  WARNING: This will download ~60M records and may take 8-12 minutes.")
+    print("💾 Ensure you have sufficient disk space (~100MB).")
     print("🌐 Ensure stable internet connection.")
+    print("💡 Existing data will be preserved (INSERT OR REPLACE)")
     
-    response = input("\n❓ Proceed with 5-year historical download? (y/N): ").strip().lower()
+    response = input("\n❓ Proceed with historical download from 2019-01-01? (y/N): ").strip().lower()
     if response not in ['y', 'yes']:
         print("❌ Download cancelled.")
         return
     
     # Start download
-    print("\n🚀 Starting 5-year historical download...")
-    print("⏱️  Estimated time: 6-10 minutes")
-    print("📊 Expected records: ~46M")
+    print("\n🚀 Starting historical download from 2019-01-01...")
+    print("⏱️  Estimated time: 8-12 minutes")
+    print("📊 Expected records: ~60M")
+    print("📅 Date Range: 2019-01-01 to Current Date")
     print("-" * 80)
     
     start_time = time.time()
     
     try:
-        # Download all data using threaded approach
-        results = downloader.download_all_eod_data_threaded(years=5)
+        # Calculate years from 2019-01-01 to current date
+        start_date = "2019-01-01"
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        years_diff = (end_dt - start_dt).days / 365.25
+        
+        print(f"📅 Downloading data for {years_diff:.1f} years ({start_date} to {end_date})")
+        
+        # Download all data using threaded approach with custom date range
+        results = downloader.download_all_eod_data_threaded(start_date, end_date)
         
         # Calculate total time
         total_time = time.time() - start_time
@@ -71,7 +83,8 @@ def main():
         print(f"⏱️  Total Time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
         print(f"📊 Total Records: {results['total_records']:,}")
         print(f"🚀 Records per Second: {results['records_per_second']:.2f}")
-        print(f"📈 Speed Improvement: {results['speed_improvement']:.1f}x faster than sequential")
+        if 'speed_improvement' in results:
+            print(f"📈 Speed Improvement: {results['speed_improvement']:.1f}x faster than sequential")
         
         print("\n📋 DETAILED RESULTS:")
         for data_type, result in results['detailed_results'].items():
@@ -91,7 +104,8 @@ def main():
                 if data_stats['earliest_date']:
                     print(f"     • Date Range: {data_stats['earliest_date']} to {data_stats['latest_date']}")
         
-        print("\n🎉 5-YEAR HISTORICAL DOWNLOAD COMPLETED!")
+        print("\n🎉 HISTORICAL DOWNLOAD COMPLETED!")
+        print(f"📅 Date Range: {start_date} to {end_date}")
         print("📁 Data stored in: data/comprehensive_equity.duckdb")
         print("📈 Ready for analysis and backtesting!")
         
