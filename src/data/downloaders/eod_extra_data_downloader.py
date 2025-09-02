@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 class EODExtraDataDownloader:
     """Downloads EOD extra data from NSE using NSE Utility methods."""
     
-    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb"):
+    def __init__(self, db_path: str = "data/comprehensive_equity.duckdb", force_recreate_tables: bool = False):
         """Initialize the EOD extra data downloader."""
         self.db_path = db_path
         self.nse = NseUtils()
@@ -46,6 +46,7 @@ class EODExtraDataDownloader:
         self.retry_attempts = 3
         self.delay_between_requests = 0.2  # Reduced delay for faster downloads
         self.db_lock = threading.Lock()  # Thread-safe database operations
+        self.force_recreate_tables = force_recreate_tables
         
         # Initialize database
         self._init_database()
@@ -60,10 +61,15 @@ class EODExtraDataDownloader:
         # Connect to DuckDB
         self.conn = duckdb.connect(self.db_path)
         
-        # Drop and recreate FNO Bhav Copy table to ensure correct schema
-        self.conn.execute('DROP TABLE IF EXISTS fno_bhav_copy')
+        # Only recreate tables if explicitly requested (for maintenance/repair)
+        if self.force_recreate_tables:
+            logger.warning("⚠️ Force recreating tables - this will DELETE ALL EXISTING DATA!")
+            self.conn.execute('DROP TABLE IF EXISTS fno_bhav_copy')
+            self.conn.execute('DROP TABLE IF EXISTS fii_dii_activity')
+        
+        # Create FNO Bhav Copy table if it doesn't exist (don't drop existing data)
         self.conn.execute('''
-            CREATE TABLE fno_bhav_copy (
+            CREATE TABLE IF NOT EXISTS fno_bhav_copy (
                 TradDt VARCHAR,
                 BizDt VARCHAR,
                 Sgmt VARCHAR,
@@ -150,10 +156,9 @@ class EODExtraDataDownloader:
             )
         ''')
         
-        # Create FII DII Activity table
-        self.conn.execute('DROP TABLE IF EXISTS fii_dii_activity')
+        # Create FII DII Activity table if it doesn't exist (don't drop existing data)
         self.conn.execute('''
-            CREATE TABLE fii_dii_activity (
+            CREATE TABLE IF NOT EXISTS fii_dii_activity (
                 category VARCHAR,
                 date VARCHAR,
                 buyValue DOUBLE,

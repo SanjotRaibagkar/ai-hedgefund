@@ -33,7 +33,7 @@ class DailyDataUpdater:
         self.config_path = config_path
         self.collector = AsyncDataCollector(self.db_manager)
         self.quality_monitor = DataQualityMonitor(self.db_manager)
-        self.eod_downloader = EODExtraDataDownloader()
+        self.eod_downloader = EODExtraDataDownloader(force_recreate_tables=False)
         
         # Load ticker configuration
         self.tickers_config = self._load_ticker_config()

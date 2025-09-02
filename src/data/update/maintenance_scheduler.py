@@ -32,7 +32,7 @@ class MaintenanceScheduler:
         self.config_path = config_path
         self.db_manager = DatabaseManager()
         self.daily_updater = SimplePriceUpdater()
-        self.eod_downloader = EODExtraDataDownloader()
+        self.eod_downloader = EODExtraDataDownloader(force_recreate_tables=False)
         
         # Load scheduler configuration
         self.scheduler_config = self._load_scheduler_config()
